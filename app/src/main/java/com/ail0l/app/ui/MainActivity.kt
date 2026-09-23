@@ -2,10 +2,12 @@ package com.ail0l.app.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -184,13 +187,13 @@ private fun AppRoot(widgetCommand: StateFlow<String?>) {
     }
 }
 
-/** Автопроверка обновлений при запуске: если есть релиз новее — предлагаем установить. */
+/** Автопроверка обновлений при запуске: если есть релиз новее — предлагаем обновиться. */
 @Composable
 private fun AutoUpdateDialog() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var update by remember { mutableStateOf<ReleaseInfo?>(null) }
-    var downloading by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
     var checked by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -214,23 +217,18 @@ private fun AutoUpdateDialog() {
                 )
             },
             confirmButton = {
-                TextButton(
-                    enabled = !downloading,
+                Button(
+                    enabled = !busy,
                     onClick = {
-                        if (downloading) return@TextButton
-                        val url = r.apkUrl
-                        if (url.isNullOrBlank()) {
-                            update = null
-                            return@TextButton
-                        }
-                        downloading = true
+                        val url = r.apkUrl ?: return@Button
+                        busy = true
                         scope.launch {
                             val dir = File(context.cacheDir, "update").apply { mkdirs() }
                             val apk = File(dir, "ail0l-${r.tag.trimStart('v')}.apk")
                             val ok = UpdateChecker.downloadApk(url, apk)
-                            downloading = false
-                            if (!ok) return@launch
+                            busy = false
                             update = null
+                            if (!ok) return@launch
                             if (!ApkInstaller.canRequestPackageInstalls(context)) {
                                 ApkInstaller.openInstallPermissions(context)
                             } else {
@@ -238,10 +236,33 @@ private fun AutoUpdateDialog() {
                             }
                         }
                     }
-                ) { Text(if (downloading) "Скачиваю…" else "Скачать и установить") }
+                ) { Text(if (busy) "Скачиваю…" else "Загрузить и обновить") }
             },
             dismissButton = {
-                TextButton(onClick = { update = null }) { Text("Позже") }
+                Row {
+                    TextButton(
+                        enabled = !busy,
+                        onClick = {
+                            val url = r.apkUrl ?: return@TextButton
+                            busy = true
+                            scope.launch {
+                                val uri = UpdateChecker.downloadApkToDownloads(context, url, r.tag)
+                                busy = false
+                                update = null
+                                if (uri != null) {
+                                    Toast.makeText(
+                                        context,
+                                        "APK сохранён в «Загрузки»",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    Toast.makeText(context, "Не удалось скачать", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    ) { Text("Загрузить") }
+                    TextButton(onClick = { update = null }) { Text("Отмена") }
+                }
             }
         )
     }

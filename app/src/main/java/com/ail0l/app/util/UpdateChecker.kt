@@ -1,5 +1,10 @@
 package com.ail0l.app.util
 
+import android.content.ContentValues
+import android.content.Context
+import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -82,4 +87,35 @@ object UpdateChecker {
             }
         }.getOrDefault(false)
     }
+
+    /** Скачивает APK в системную папку «Загрузки» (MediaStore). Возвращает Uri или null. */
+    suspend fun downloadApkToDownloads(context: Context, url: String, tag: String): Uri? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val name = "ail0l-${tag.trimStart('v')}.apk"
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, name)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+                val resolver = context.contentResolver
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: return@runCatching null
+                val ok = resolver.openOutputStream(uri)?.use { out ->
+                    val req = Request.Builder().url(url).header("User-Agent", "AIL0L/1.0").get().build()
+                    client.newCall(req).execute().use { r ->
+                        if (!r.isSuccessful) {
+                            false
+                        } else {
+                            r.body?.byteStream()?.use { it.copyTo(out, 1 shl 20) }
+                            true
+                        }
+                    }
+                } ?: false
+                if (!ok) {
+                    resolver.delete(uri, null, null)
+                    null
+                } else uri
+            }.getOrNull()
+        }
 }
