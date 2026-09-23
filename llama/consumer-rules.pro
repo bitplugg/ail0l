@@ -1,0 +1,2 @@
+-keep class de.kherud.** { *; }
+-keep class com.arm.aichat.** { *; }

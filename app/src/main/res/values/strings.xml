@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AIL0L</string>
+    <string name="tagline">ИИ-агент, который растёт вместе с тобой</string>
+
+    <string name="tab_chat">Чат</string>
+    <string name="tab_models">Модели</string>
+    <string name="tab_memory">Память</string>
+    <string name="tab_thoughts">Мысли ИИ</string>
+    <string name="tab_settings">Настройки</string>
+
+    <string name="input_hint">Спроси о чём-нибудь…</string>
+    <string name="send">Отправить</string>
+    <string name="stop">Стоп</string>
+
+    <string name="engine_local">Локально (llama.cpp)</string>
+    <string name="engine_mistral">Mistral API</string>
+    <string name="engine_openai">OpenAI-совместимый API</string>
+    <string name="engine_anthropic">Anthropic API</string>
+</resources>
