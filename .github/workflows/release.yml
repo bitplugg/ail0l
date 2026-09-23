@@ -31,14 +31,17 @@ jobs:
 
       - name: Set up Android SDK (platform, NDK, CMake)
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          # Путь SDK на виртуальных машинах GitHub Actions
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
           SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMGR" ]; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
-              android-sdk-platform-tools-common
-            SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            SDKMGR="$ANDROID_HOME/cmdline-tools/bin/sdkmanager"
+          fi
+          if [ ! -x "$SDKMGR" ]; then
+            echo "::error::sdkmanager not found under $ANDROID_HOME"
+            exit 1
           fi
           yes | "$SDKMGR" --licenses >/dev/null || true
           "$SDKMGR" --install \
