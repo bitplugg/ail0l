@@ -2,6 +2,7 @@ package com.ail0l.app.ai.engines
 
 import android.content.Context
 import com.ail0l.app.ai.Engine
+import com.ail0l.app.ai.download.DeviceProfile
 import com.ail0l.app.data.AppDatabase
 import com.ail0l.app.data.Settings
 import com.arm.aichat.AiChat
@@ -14,7 +15,8 @@ class EngineFactory(private val context: Context) {
     fun engineFor(settings: Settings): AiEngine = when (settings.engine) {
         Engine.LOCAL -> LocalLlamaEngine(
             engine = AiChat.getInferenceEngine(context),
-            settings = settings
+            settings = settings,
+            nBatch = LocalLlamaEngine.autoBatchFor(DeviceProfile.usableRamBytes(context))
         )
 
         Engine.MISTRAL -> OpenAiEngine(

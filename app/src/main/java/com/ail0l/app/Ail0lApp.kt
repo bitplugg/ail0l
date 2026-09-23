@@ -21,6 +21,7 @@ class Ail0lApp : Application() {
         Dependencies.init(this)
 
         Notifications.ensureChannel(this)
+        Notifications.ensureModelChannel(this)
 
         scope.launch {
             val settings = Dependencies.settings.settings.first()

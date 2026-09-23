@@ -33,10 +33,11 @@ class OpenAiEngine(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    override fun chat(messages: List<ChatMessage>): Flow<String> = flow {
+    override fun chat(messages: List<ChatMessage>, predictLength: Int?): Flow<String> = flow {
         val body = buildJsonObject {
             put("model", model)
             put("stream", true)
+            put("max_tokens", (predictLength ?: 1024).coerceIn(16, 8192))
             putJsonArray("messages") {
                 messages.forEach { msg ->
                     addJsonObject {

@@ -26,7 +26,8 @@ import java.io.File
  */
 class LocalLlamaEngine(
     private val engine: InferenceEngine,
-    private val settings: Settings
+    private val settings: Settings,
+    private val nBatch: Int = DEFAULT_N_BATCH
 ) : AiEngine {
 
     private var loadedPath: String? = null
@@ -57,14 +58,15 @@ class LocalLlamaEngine(
                 engine.configure(
                     nCtx = settings.contextLength.coerceIn(128, 4096),
                     nThreads = settings.cpuThreads.coerceAtLeast(0),
-                    flashAttn = settings.flashAttention
+                    flashAttn = settings.flashAttention,
+                    nBatch = nBatch
                 )
                 engine.loadModel(path)
             }
         }
     }
 
-    override fun chat(messages: List<ChatMessage>): Flow<String> = flow {
+    override fun chat(messages: List<ChatMessage>, predictLength: Int?): Flow<String> = flow {
         mutex.withLock {
             ensureLoaded()
 
@@ -92,7 +94,10 @@ class LocalLlamaEngine(
                 nativeThread.addAll(history)
             }
 
-            engine.sendUserPrompt(user.second)
+            engine.sendUserPrompt(
+                message = user.second,
+                predictLength = predictLength ?: InferenceEngine.DEFAULT_PREDICT_LENGTH
+            )
                 .catch { e -> throw IllegalStateException("Ошибка генерации: ${e.message}", e) }
                 .collect { token -> emit(token) }
             nativeThread += user
@@ -112,5 +117,12 @@ class LocalLlamaEngine(
 
     companion object {
         const val DEFAULT_PERSONA = "Ты AIL0L — дружелюбный ИИ-напарник."
+        const val DEFAULT_N_BATCH = 512
+
+        /** Автоподбор батча под объём ОЗУ: на 4 ГБ — 512, на 8 ГБ — 2048, потолок 2048. */
+        fun autoBatchFor(ramBytes: Long): Int =
+            ((ramBytes / (1024 * 1024 * 1024)) * 256)
+                .toInt()
+                .coerceIn(DEFAULT_N_BATCH, 2048)
     }
 }

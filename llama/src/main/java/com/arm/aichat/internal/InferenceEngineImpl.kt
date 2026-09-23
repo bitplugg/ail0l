@@ -62,7 +62,7 @@ internal class InferenceEngineImpl private constructor(
     private external fun load(modelPath: String): Int
 
     @FastNative
-    private external fun applyConfig(nCtx: Int, nThreads: Int, flashAttn: Boolean)
+    private external fun applyConfig(nCtx: Int, nThreads: Int, flashAttn: Boolean, nBatch: Int)
 
     @FastNative
     private external fun applySampler(temp: Float, topK: Int, topP: Float): Int
@@ -191,9 +191,14 @@ internal class InferenceEngineImpl private constructor(
             }
         }
 
-    override suspend fun configure(nCtx: Int, nThreads: Int, flashAttn: Boolean) =
+    override suspend fun configure(nCtx: Int, nThreads: Int, flashAttn: Boolean, nBatch: Int) =
         withContext(llamaDispatcher) {
-            applyConfig(nCtx.coerceAtLeast(128), nThreads.coerceAtLeast(-1), flashAttn)
+            applyConfig(
+                nCtx.coerceAtLeast(128),
+                nThreads.coerceAtLeast(-1),
+                flashAttn,
+                nBatch.coerceAtLeast(64)
+            )
         }
 
     override suspend fun setSamplerParams(temp: Float, topK: Int, topP: Float) =

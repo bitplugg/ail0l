@@ -31,13 +31,13 @@ class AnthropicEngine(
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    override fun chat(messages: List<ChatMessage>): Flow<String> = flow {
+    override fun chat(messages: List<ChatMessage>, predictLength: Int?): Flow<String> = flow {
         val system = messages.filter { it is ChatMessage.System }.joinToString("\n\n") { it.content }
         val turns = messages.filterNot { it is ChatMessage.System }
 
         val body = buildJsonObject {
             put("model", model)
-            put("max_tokens", 1024)
+            put("max_tokens", (predictLength ?: 1024).coerceIn(16, 8192))
             put("stream", true)
             if (system.isNotBlank()) put("system", system)
             putJsonArray("messages") {

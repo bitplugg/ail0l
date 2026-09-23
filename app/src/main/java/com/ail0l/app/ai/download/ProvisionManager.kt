@@ -4,6 +4,7 @@ import android.content.Context
 import com.ail0l.app.ai.Engine
 import com.ail0l.app.data.AppDatabase
 import com.ail0l.app.data.SettingsRepository
+import com.ail0l.app.util.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -68,6 +69,8 @@ class ProvisionManager(
         scope.launch {
             if (_state.value.status == "downloading") return@launch
             _state.value = ProvisionState(entry = entry, status = "downloading")
+            Notifications.ensureModelChannel(context)
+            Notifications.notifyModelProgress(context, 0, entry.sizeBytes)
             try {
                 val token = settings.settings.first().hfToken
                 val downloader = HfDownloader(context, db, token)
@@ -77,6 +80,7 @@ class ProvisionManager(
                         progress = p,
                         status = if (p.done) "done" else "downloading"
                     )
+                    Notifications.notifyModelProgress(context, p.downloadedBytes, p.totalBytes)
                 }
                 settings.setEngine(Engine.LOCAL)
                 settings.setLocalModelPath(
@@ -85,7 +89,9 @@ class ProvisionManager(
                         "${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf"
                     ).absolutePath
                 )
+                Notifications.cancelModelProgress(context)
             } catch (e: Exception) {
+                Notifications.cancelModelProgress(context)
                 _state.value = ProvisionState(entry = entry, status = "error")
             }
         }

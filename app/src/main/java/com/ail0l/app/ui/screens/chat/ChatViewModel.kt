@@ -35,6 +35,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _streaming = MutableStateFlow("")
     private val _error = MutableStateFlow<String?>(null)
     private val _notice = MutableStateFlow<String?>(null)
+    private val _quickMode = MutableStateFlow(false)
     private val _thoughts = MutableStateFlow(ThoughtLog.entries())
     private val _syncStatus = MutableStateFlow<String?>(null)
     private val _counts = MutableStateFlow(Triple(0, 0, 0)) // outbox, pending, inbox
@@ -56,6 +57,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val input: StateFlow<String> = _input.asStateFlow()
     val sending: StateFlow<Boolean> = _sending.asStateFlow()
     val streaming: StateFlow<String> = _streaming.asStateFlow()
+    val quickMode: StateFlow<Boolean> = _quickMode.asStateFlow()
     val error: StateFlow<String?> = _error.asStateFlow()
     val notice: StateFlow<String?> = _notice.asStateFlow()
     val thoughts: StateFlow<List<ThoughtLog.Entry>> = _thoughts.asStateFlow()
@@ -86,6 +88,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _input.value = text
     }
 
+    /** Переключает «быстрый ответ» — лимит генерируемых токенов на следующее обращение. */
+    fun toggleQuickMode() {
+        _quickMode.value = !_quickMode.value
+    }
+
     fun showNotice(msg: String) {
         _notice.value = msg
     }
@@ -94,6 +101,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val text = _input.value.trim()
         if (text.isEmpty() || _sending.value) return
         _input.value = ""
+        doSend(text)
+    }
+
+    /** Отправка голосовой команды без изменения поля ввода. */
+    fun sendVoice(text: String) {
+        if (text.isBlank() || _sending.value) return
         doSend(text)
     }
 
@@ -129,8 +142,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             _error.value = null
             _notice.value = null
             _sending.value = true
+            val predictLength = if (_quickMode.value) QUICK_PREDICT_LENGTH else null
             try {
-                agent.send(id, text).collect { event ->
+                agent.send(id, text, predictLength).collect { event ->
                     when (event) {
                         is Agent.Event.Token -> _streaming.value += event.text
                         is Agent.Event.Done -> {
@@ -280,5 +294,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         private val IMPORT_PATTERN = Regex("""\[?(Вы|AIL0L|user|assistant|бот|Бот)\]?\s*:""", RegexOption.IGNORE_CASE)
+
+        /** «Быстрый ответ» — сколько токенов максимум генерировать. */
+        const val QUICK_PREDICT_LENGTH = 128
     }
 }

@@ -17,4 +17,10 @@
     <string name="engine_mistral">Mistral API</string>
     <string name="engine_openai">OpenAI-совместимый API</string>
     <string name="engine_anthropic">Anthropic API</string>
+
+    <string name="sync_tile_label">Уведомления синка</string>
+    <string name="widget_memory">Запомни…</string>
+    <string name="widget_search">Поиск в сети…</string>
+    <string name="widget_call">Позови…</string>
+    <string name="widget_open">Открыть AIL0L</string>
 </resources>

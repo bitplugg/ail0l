@@ -15,8 +15,8 @@ interface InferenceEngine {
     /** Ждёт инициализации нативного слоя; при состоянии [State.Error] перезапускает её. */
     suspend fun ensureInitialized()
 
-    /** Задаёт параметры контекста/потоков ДО загрузки модели. */
-    suspend fun configure(nCtx: Int, nThreads: Int, flashAttn: Boolean)
+    /** Задаёт параметры контекста/потоков/батча ДО загрузки модели. */
+    suspend fun configure(nCtx: Int, nThreads: Int, flashAttn: Boolean, nBatch: Int)
 
     /** Обновляет параметры сэмплера (справедливо после загрузки модели). */
     suspend fun setSamplerParams(temp: Float, topK: Int, topP: Float)

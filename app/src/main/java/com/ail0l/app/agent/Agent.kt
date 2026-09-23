@@ -49,7 +49,7 @@ class Agent(
 
     private val busy = HashSet<Long>()
 
-    fun send(conversationId: Long, text: String): Flow<Event> = flow {
+    fun send(conversationId: Long, text: String, predictLength: Int? = null): Flow<Event> = flow {
         val trimmed = text.trim()
         check(trimmed.isNotEmpty()) { "Пустое сообщение" }
         require(busy.add(conversationId)) { "Уже генерируем ответ в этом диалоге" }
@@ -151,11 +151,22 @@ class Agent(
             // 6. стриминг
             val engine = engineFactory.engineFor(settings)
             val sb = StringBuilder()
+            val genStartMs = if (predictLength != null) System.currentTimeMillis() else 0L
+            var tokens = 0
+            var quick = false
             try {
+                if (predictLength != null) {
+                    quick = true
+                    ThoughtLog.add(
+                        ThoughtLog.Tag.THINK,
+                        "Быстрый ответ включён: лимит ${predictLength} токенов (${engine.label})"
+                    )
+                }
                 emit(Event.Token("")) // маркер начала
                 ThoughtLog.add(ThoughtLog.Tag.THINK, "Размышляю над ответом… (${engine.label})")
-                engine.chat(contextMessages).collect { tok ->
+                engine.chat(contextMessages, predictLength).collect { tok ->
                     sb.append(tok)
+                    tokens++
                     emit(Event.Token(tok))
                 }
             } catch (e: CancellationException) {
@@ -181,7 +192,7 @@ class Agent(
             emit(Event.Done(full, engine.label))
             ThoughtLog.add(
                 ThoughtLog.Tag.THINK,
-                "Ответ готов: ${full.length} симв. · движок ${engine.label}"
+                generationReport(full, tokens, genStartMs, quick) + " · движок ${engine.label}"
             )
         } finally {
             busy.remove(conversationId)
@@ -192,6 +203,19 @@ class Agent(
         db.dao().insertMessage(
             MessageEntity(conversationId = conversationId, role = "assistant", content = text, status = status)
         )
+    }
+
+    /** Краткая статистика генерации для «Мысли ИИ»: токены/сек и время ответа. */
+    private fun generationReport(full: String, tokens: Int, startMs: Long, quick: Boolean): String {
+        if (startMs == 0L) return "Ответ готов: ${full.length} симв."
+        val elapsedMs = System.currentTimeMillis() - startMs
+        val tps = if (elapsedMs > 0L) tokens * 1000f / elapsedMs else 0f
+        return buildString {
+            append("Ответ готов: ${full.length} симв. · %d ток. · %.1f ток/с · %.1f с".format(
+                tokens, tps, elapsedMs / 1000f
+            ))
+            if (quick) append(" · (быстро)")
+        }
     }
 
     private suspend fun enqueueOutboxIfSync(settings: Settings, conversationId: Long, content: String) {

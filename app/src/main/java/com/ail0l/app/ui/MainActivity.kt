@@ -1,9 +1,11 @@
 package com.ail0l.app.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -25,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,11 +38,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ail0l.app.R
+import com.ail0l.app.dm.Dependencies
 import com.ail0l.app.ui.screens.chat.ChatScreen
+import com.ail0l.app.ui.screens.chat.ChatViewModel
 import com.ail0l.app.ui.screens.memory.MemoryScreen
 import com.ail0l.app.ui.screens.models.ModelsScreen
 import com.ail0l.app.ui.screens.settings.SettingsScreen
@@ -48,16 +54,37 @@ import com.ail0l.app.ui.theme.Ail0lTheme
 import com.ail0l.app.util.ApkInstaller
 import com.ail0l.app.util.ReleaseInfo
 import com.ail0l.app.util.UpdateChecker
+import com.ail0l.app.widget.QuickCommandWidget
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+
+    /** Быстрые команды из виджета — подставляются в поле ввода чата. */
+    private val widgetCommand = MutableStateFlow<String?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(QuickCommandWidget.EXTRA_COMMAND)?.let { widgetCommand.value = it }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        intent.getStringExtra(QuickCommandWidget.EXTRA_COMMAND)?.let { widgetCommand.value = it }
         enableEdgeToEdge()
         setContent {
-            Ail0lTheme {
-                AppRoot()
+            // тема: настройка «Светлая/Тёмная/Авто» (systemDark)
+            val settings by Dependencies.settings.settings.collectAsState(initial = null)
+            val darkTheme = when (settings?.systemDark) {
+                "light" -> false
+                "dark" -> true
+                else -> isSystemInDarkTheme()
+            }
+            Ail0lTheme(darkTheme = darkTheme) {
+                AppRoot(widgetCommand = widgetCommand)
             }
         }
     }
@@ -72,11 +99,27 @@ private enum class Tab(val route: String, val labelRes: Int) {
 }
 
 @Composable
-private fun AppRoot() {
+private fun AppRoot(widgetCommand: StateFlow<String?>) {
     val navController = rememberNavController()
     var selected by rememberSaveable { mutableIntStateOf(0) }
+    val chatViewModel: ChatViewModel = viewModel()
+    val command by widgetCommand.collectAsState()
 
     AutoUpdateDialog()
+
+    // быстрые команды из виджета: открыть чат и подставить префикс
+    LaunchedEffect(command) {
+        val prefill = QuickCommandWidget.prefillFor(command)
+        if (command != null && prefill.isNotBlank()) {
+            selected = Tab.CHAT.ordinal
+            navController.navigate(Tab.CHAT.route) {
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            chatViewModel.setInput(prefill)
+        }
+    }
 
     Scaffold(
         bottomBar = {

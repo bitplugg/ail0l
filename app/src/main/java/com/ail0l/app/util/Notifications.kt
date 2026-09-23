@@ -15,6 +15,9 @@ object Notifications {
     const val CHANNEL_ID = "ail0l_incoming"
     private const val NOTIF_ID = 1001
 
+    const val MODEL_CHANNEL_ID = "ail0l_model"
+    private const val MODEL_NOTIF_ID = 1002
+
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val mgr = context.getSystemService(NotificationManager::class.java)
@@ -29,6 +32,52 @@ object Notifications {
                 }
             )
         }
+    }
+
+    /** Канал для прогресса скачивания моделей. */
+    fun ensureModelChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val mgr = context.getSystemService(NotificationManager::class.java)
+        if (mgr.getNotificationChannel(MODEL_CHANNEL_ID) == null) {
+            mgr.createNotificationChannel(
+                NotificationChannel(
+                    MODEL_CHANNEL_ID,
+                    "Скачивание моделей",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Прогресс загрузки ИИ-моделей"
+                }
+            )
+        }
+    }
+
+    /** Постоянное уведомление о ходе скачивания модели. */
+    fun notifyModelProgress(
+        context: Context,
+        downloadedBytes: Long,
+        totalBytes: Long
+    ) {
+        if (totalBytes <= 0) return
+        val pct = (downloadedBytes * 100 / totalBytes).toInt().coerceIn(0, 100)
+        val mbytes = downloadedBytes / (1024.0 * 1024.0)
+        val totalMb = totalBytes / (1024.0 * 1024.0)
+
+        val notification = NotificationCompat.Builder(context, MODEL_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("Скачивание модели AIL0L")
+            .setContentText("%d%% · %.0f из %.0f МБ".format(pct, mbytes, totalMb))
+            .setProgress(100, pct, false)
+            .setOnlyAlertOnce(true)
+            .setOngoing(pct < 100)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        context.getSystemService(NotificationManager::class.java)?.notify(MODEL_NOTIF_ID, notification)
+    }
+
+    /** Снимает уведомление о ходе скачивания модели. */
+    fun cancelModelProgress(context: Context) {
+        context.getSystemService(NotificationManager::class.java)?.cancel(MODEL_NOTIF_ID)
     }
 
     /** Показывает уведомление. Возвращает false, если нет разрешения (Android 13+). */

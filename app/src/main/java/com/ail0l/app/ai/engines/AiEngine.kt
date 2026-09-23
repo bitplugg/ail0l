@@ -6,9 +6,10 @@ import kotlinx.coroutines.flow.Flow
 /**
  * Универсальный интерфейс ИИ-движка.
  * [chat] возвращает поток текстовых дельт (токенов) финального ответа ассистента.
+ * [predictLength] — лимит генерируемых токенов («быстрый ответ»); null = стандартный.
  */
 interface AiEngine {
     val label: String
-    fun chat(messages: List<ChatMessage>): Flow<String>
+    fun chat(messages: List<ChatMessage>, predictLength: Int? = null): Flow<String>
     suspend fun release() {}
 }

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
@@ -143,6 +144,20 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                     ToggleRow("Микрофон в чате (STT)", s.sttEnabled, viewModel::setStt)
                     ToggleRow("Уведомления о входящих", s.notifyEnabled, viewModel::setNotify)
                 }
+            } }
+
+            item { SectionCard(title = "Внешний вид", icon = { Icon(Icons.Filled.Visibility, null) }) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeChip("Авто", "auto", s.systemDark, viewModel::setSystemDark)
+                    ThemeChip("Светлая", "light", s.systemDark, viewModel::setSystemDark)
+                    ThemeChip("Тёмная", "dark", s.systemDark, viewModel::setSystemDark)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Тема применяется сразу после выбора.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } }
 
             item { SectionCard(title = "Личность", icon = { Icon(Icons.Filled.Person, null) }) {
@@ -408,6 +423,15 @@ private fun UpdateCard() {
             }
         }
     }
+}
+
+@Composable
+private fun ThemeChip(label: String, value: String, current: String, onSelect: (String) -> Unit) {
+    FilterChip(
+        selected = current == value,
+        onClick = { onSelect(value) },
+        label = { Text(label, maxLines = 1) }
+    )
 }
 
 @Composable

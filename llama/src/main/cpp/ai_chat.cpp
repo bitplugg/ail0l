@@ -42,6 +42,7 @@ static common_sampler                   * g_sampler;
 
 static int        g_n_ctx       = DEFAULT_CONTEXT_SIZE;
 static int        g_n_threads   = -1; // -1 = авто
+static int        g_n_batch     = BATCH_SIZE;
 
 extern "C"
 JNIEXPORT void JNICALL
@@ -122,8 +123,8 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
              __func__, trained_context_size, ctx_size);
     }
     ctx_params.n_ctx = ctx_size;
-    ctx_params.n_batch = BATCH_SIZE;
-    ctx_params.n_ubatch = BATCH_SIZE;
+    ctx_params.n_batch = g_n_batch;
+    ctx_params.n_ubatch = g_n_batch;
     ctx_params.n_threads = n_threads;
     ctx_params.n_threads_batch = n_threads;
     // flash attention включён в llama.cpp по умолчанию
@@ -146,7 +147,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_prepare(JNIEnv * /*env*/, jobje
     auto *context = init_context(g_model);
     if (!context) { return 1; }
     g_context = context;
-    g_batch = llama_batch_init(BATCH_SIZE, 0, 1);
+    g_batch = llama_batch_init(g_n_batch, 0, 1);
     g_chat_templates = common_chat_templates_init(g_model, "");
     g_sampler = new_sampler(DEFAULT_SAMPLER_TEMP);
     return 0;
@@ -328,8 +329,8 @@ static int decode_tokens_in_batches(
         const llama_pos start_pos,
         const bool compute_last_logit = false) {
     LOGd("%s: Decode %d tokens starting at position %d", __func__, (int) tokens.size(), start_pos);
-    for (int i = 0; i < (int) tokens.size(); i += BATCH_SIZE) {
-        const int cur_batch_size = std::min((int) tokens.size() - i, BATCH_SIZE);
+    for (int i = 0; i < (int) tokens.size(); i += g_n_batch) {
+        const int cur_batch_size = std::min((int) tokens.size() - i, g_n_batch);
         common_batch_clear(batch);
         LOGv("%s: Preparing a batch size of %d starting at: %d", __func__, cur_batch_size, i);
 
@@ -476,12 +477,14 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_applyConfig(
         jobject /*unused*/,
         jint n_ctx,
         jint n_threads,
-        jboolean flash_attn
+        jboolean flash_attn,
+        jint n_batch
 ) {
     (void) flash_attn; // llama.cpp v0.20+: flash attention всегда включён
     if (n_ctx > 0) g_n_ctx = n_ctx;
     g_n_threads = n_threads;
-    LOGi("%s: config n_ctx=%d threads=%d", __func__, g_n_ctx, g_n_threads);
+    if (n_batch >= 64) g_n_batch = n_batch;
+    LOGi("%s: config n_ctx=%d threads=%d batch=%d", __func__, g_n_ctx, g_n_threads, g_n_batch);
 }
 
 extern "C"

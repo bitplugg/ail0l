@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.IosShare
@@ -36,6 +37,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -89,7 +91,14 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     fun beginStt() {
         scope.launch {
             val text = Stt.recognize(context)
-            if (text != null) viewModel.setInput(if (input.isBlank()) text else "$input $text")
+            if (text != null) {
+                // голосовая команда: если поле пустое и сказана команда — сразу отправляем
+                if (input.isBlank() && text.startsWithAnyCommand()) {
+                    viewModel.sendVoice(text)
+                } else {
+                    viewModel.setInput(if (input.isBlank()) text else "$input $text")
+                }
+            }
         }
     }
     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -161,6 +170,8 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 viewModel = viewModel,
                 input = input,
                 sending = sending,
+                quickMode = viewModel.quickMode.collectAsState().value,
+                onToggleQuick = viewModel::toggleQuickMode,
                 onMic = {
                     if (it) beginStt() else micLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                 },
@@ -185,6 +196,8 @@ private fun ChatTab(
     viewModel: ChatViewModel,
     input: String,
     sending: Boolean,
+    quickMode: Boolean,
+    onToggleQuick: () -> Unit,
     onMic: (Boolean) -> Unit,
     clipboardText: (String) -> Unit
 ) {
@@ -247,7 +260,15 @@ private fun ChatTab(
                 shape = MaterialTheme.shapes.extraLarge,
                 maxLines = 5
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
+            FilterChip(
+                selected = quickMode,
+                onClick = onToggleQuick,
+                enabled = !sending,
+                label = { Text("Быстрый", maxLines = 1) },
+                leadingIcon = { Icon(Icons.Filled.Bolt, null, modifier = Modifier.height(16.dp)) }
+            )
+            Spacer(Modifier.width(4.dp))
             IconButton(onClick = { onMic(false) }) {
                 Icon(Icons.Filled.Mic, contentDescription = "Голос")
             }
@@ -292,6 +313,13 @@ private fun MessageBubble(msg: MessageEntity, clipboardText: (String) -> Unit, o
             }
         }
     }
+}
+
+/** Голосовые команды, которые отправляются сразу без подтверждения. */
+private fun String.startsWithAnyCommand(): Boolean {
+    val t = trim().lowercase()
+    return listOf("запомни", "забудь", "что знаешь", "найди в интернете", "позови", "помоги")
+        .any { t.startsWith(it) || t == it }
 }
 
 @Composable
