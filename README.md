@@ -1,9 +1,9 @@
 # AIIA — ИИ-агент, который развивается вместе с тобой
 
 [![GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
-[![commits](https://img.shields.io/github/commit-activity/m/bitplugg/aiia)](https://github.com/bitplugg/ail0l/commits)
-[![stars](https://img.shields.io/github/stars/bitplugg/aiia)](https://github.com/bitplugg/ail0l/stargazers)
-[![release](https://img.shields.io/github/v/release/bitplugg/aiia)](https://github.com/bitplugg/ail0l/releases)
+[![commits](https://img.shields.io/github/commit-activity/m/bitplugg/ail0l)](https://github.com/bitplugg/ail0l/commits)
+[![stars](https://img.shields.io/github/stars/bitplugg/ail0l)](https://github.com/bitplugg/ail0l/stargazers)
+[![release](https://img.shields.io/github/v/release/bitplugg/ail0l)](https://github.com/bitplugg/ail0l/releases)
 [![platform](https://img.shields.io/badge/platform-Android-green.svg)](https://developer.android.com)
 [![llama.cpp](https://img.shields.io/badge/llama.cpp-ggml--org-orange)](https://github.com/ggml-org/llama.cpp)
 
