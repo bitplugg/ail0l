@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (например, v0.0.5)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,11 +21,26 @@ concurrency:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Resolve and validate release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${RELEASE_TAG#refs/tags/}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release tag '$TAG'. Use vMAJOR.MINOR.PATCH, for example v0.0.5"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing $TAG from ${GITHUB_SHA::12}"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -80,8 +100,11 @@ jobs:
           cat "$APK.sha256"
 
       - name: Generate changelog
+        shell: bash
         run: |
-          PREV="$(git describe --abbrev=0 --tags "$(git rev-list --tags --max-count=1 --skip=1)" 2>/dev/null || true)"
+          set -euo pipefail
+          CURRENT_TAG="${{ steps.release.outputs.tag }}"
+          PREV="$(git tag --list 'v*' --sort=-version:refname | grep -v -Fx "$CURRENT_TAG" | head -n 1 || true)"
           if [ -n "$PREV" ]; then
             git log --oneline --no-decorate "$PREV..HEAD" > CHANGELOG.md
           else
@@ -96,11 +119,14 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "AIIA ${{ github.ref_name }}"
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: "AIIA ${{ steps.release.outputs.tag }}"
+          target_commitish: ${{ github.sha }}
           body_path: CHANGELOG.md
           files: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/release/*.apk.sha256
           draft: false
           prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
