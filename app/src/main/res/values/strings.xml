@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AIL0L</string>
+    <string name="app_name">AIIA</string>
     <string name="tagline">ИИ-агент, который растёт вместе с тобой</string>
 
     <string name="tab_chat">Чат</string>
@@ -8,6 +8,7 @@
     <string name="tab_memory">Память</string>
     <string name="tab_thoughts">Мысли ИИ</string>
     <string name="tab_settings">Настройки</string>
+    <string name="tab_terminal">Терминал</string>
 
     <string name="input_hint">Спроси о чём-нибудь…</string>
     <string name="send">Отправить</string>
@@ -22,5 +23,5 @@
     <string name="widget_memory">Запомни…</string>
     <string name="widget_search">Поиск в сети…</string>
     <string name="widget_call">Позови…</string>
-    <string name="widget_open">Открыть AIL0L</string>
+    <string name="widget_open">Открыть AIIA</string>
 </resources>

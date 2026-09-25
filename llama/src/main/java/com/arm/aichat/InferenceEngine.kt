@@ -2,26 +2,39 @@ package com.arm.aichat
 
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Interface defining the core LLM inference operations.
- *
- * Vendored from ggml-org/llama.cpp `examples/llama.android` (MIT License).
- */
+
+
+
+
+
 interface InferenceEngine {
     val state: StateFlow<State>
 
     suspend fun loadModel(pathToModel: String)
 
-    /** Ждёт инициализации нативного слоя; при состоянии [State.Error] перезапускает её. */
+
     suspend fun ensureInitialized()
 
-    /** Задаёт параметры контекста/потоков/батча ДО загрузки модели. */
+
     suspend fun configure(nCtx: Int, nThreads: Int, flashAttn: Boolean, nBatch: Int)
 
-    /** Обновляет параметры сэмплера (справедливо после загрузки модели). */
+
     suspend fun setSamplerParams(temp: Float, topK: Int, topP: Float)
 
-    /** Полностью перестраивает контекст: системный промпт + история сообщений. */
+
+    suspend fun setLoraAdapter(path: String, scale: Float = 1.0f) {}
+
+
+    suspend fun setMmproj(path: String) {}
+
+
+    suspend fun analyzeImage(path: String, prompt: String = "Опиши изображение и распознай текст"): String = ""
+
+
+    suspend fun saveContextCache(path: String): Boolean = false
+    suspend fun loadContextCache(path: String): Boolean = false
+
+
     suspend fun hydrateContext(systemPrompt: String, roles: List<String>, contents: List<String>)
 
     suspend fun setSystemPrompt(systemPrompt: String)

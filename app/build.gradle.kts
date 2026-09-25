@@ -9,11 +9,11 @@ plugins {
 }
 
 android {
-    namespace = "com.ail0l.app"
+    namespace = "com.aiia.app"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.ail0l.app"
+        applicationId = "com.aiia.app"
         minSdk = 29
         targetSdk = 35
         versionCode = 3
@@ -48,8 +48,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Без keystore.properties релиз подписывается debug-ключом,
-            // чтобы CI всегда мог выложить устанавливаемый APK.
+
+
             signingConfig = if (rootProject.file("keystore.properties").exists())
                 signingConfigs.getByName("release")
             else
@@ -71,6 +71,9 @@ android {
     }
 
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -93,6 +96,16 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.compose.animation)
+
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.json)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.onnxruntime.android)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

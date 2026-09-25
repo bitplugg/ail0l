@@ -4,23 +4,11 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
-    <!-- разговорный пузырь -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M36,40 a10,10 0 0 1 10,-10 h16 a10,10 0 0 1 10,10 v12 a10,10 0 0 1 -10,10 h-14 l-8,8 v-8 h-4 a10,10 0 0 1 -10,-10 z" />
-
-    <!-- буква L -->
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M31,78 L47,28 L61,28 L77,78 L66,78 L62,66 L46,66 L42,78 Z M49,57 L59,57 L54,41 Z" />
     <path
-        android:fillColor="#6C5CE7"
-        android:pathData="M46,46 h6 v12 h16 v6 h-22 z" />
-
-    <!-- искра -->
-    <path
-        android:fillColor="#00CEC9"
-        android:pathData="M70,26 l2,5 5,2 -5,2 -2,5 -2,-5 -5,-2 5,-2 z" />
-
-    <path
-        android:fillColor="#FD79A8"
-        android:pathData="M76,64 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" />
+        android:fillColor="#FF00CEC9"
+        android:pathData="M77,25 L79,31 L85,33 L79,35 L77,41 L75,35 L69,33 L75,31 Z" />
 </vector>

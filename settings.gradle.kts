@@ -20,7 +20,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AIL0L"
+rootProject.name = "AIIA"
 
 include(":app")
 include(":llama")

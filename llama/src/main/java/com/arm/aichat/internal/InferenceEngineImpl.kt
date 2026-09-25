@@ -25,11 +25,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 
-/**
- * JNI wrapper for the llama.cpp library providing Android-friendly access to large language models.
- *
- * Vendored from ggml-org/llama.cpp `examples/llama.android` (MIT License).
- */
+
+
+
+
+
 internal class InferenceEngineImpl private constructor(
     private val nativeLibDir: String
 ) : InferenceEngine {
@@ -66,6 +66,21 @@ internal class InferenceEngineImpl private constructor(
 
     @FastNative
     private external fun applySampler(temp: Float, topK: Int, topP: Float): Int
+
+    @FastNative
+    private external fun nativeSetLoraAdapter(path: String, scale: Float): Int
+
+    @FastNative
+    private external fun nativeSetMmproj(path: String): Int
+
+    @FastNative
+    private external fun nativeAnalyzeImage(path: String, prompt: String): String?
+
+    @FastNative
+    private external fun nativeSaveContextCache(path: String): Boolean
+
+    @FastNative
+    private external fun nativeLoadContextCache(path: String): Boolean
 
     @FastNative
     private external fun reshapeContext(systemPrompt: String, roles: Array<String>, contents: Array<String>): Int
@@ -118,7 +133,7 @@ internal class InferenceEngineImpl private constructor(
                 }
                 _state.value = InferenceEngine.State.Initializing
                 Log.i(TAG, "Loading native library...")
-                System.loadLibrary("ail0l-llama")
+                System.loadLibrary("aiia-llama")
                 init(nativeLibDir)
                 _state.value = InferenceEngine.State.Initialized
                 Log.i(TAG, "Native library loaded! System info: \n${systemInfo()}")
@@ -135,19 +150,19 @@ internal class InferenceEngineImpl private constructor(
             _state.value is InferenceEngine.State.Initialized ||
                 _state.value is InferenceEngine.State.ModelReady -> return@withContext
             _state.value is InferenceEngine.State.Initializing -> {
-                // дожидаемся инициализации, запущенной из init{}
+
                 while (_state.value is InferenceEngine.State.Initializing) delay(50)
                 if (_state.value is InferenceEngine.State.Initialized) return@withContext
             }
             _state.value is InferenceEngine.State.Uninitialized -> {
-                // init{} ещё не стартовал — даём ему шанс
+
                 delay(50)
                 while (_state.value is InferenceEngine.State.Initializing) delay(50)
                 if (_state.value is InferenceEngine.State.Initialized) return@withContext
             }
-            else -> { /* Error */ }
+            else -> {  }
         }
-        // состояние Error — пробуем инициализироваться заново
+
         _state.value = InferenceEngine.State.Uninitialized
         startInit()
         while (_state.value is InferenceEngine.State.Initializing) delay(50)
@@ -211,6 +226,43 @@ internal class InferenceEngineImpl private constructor(
                 RuntimeException("Failed to apply sampler params: $rc")
             }
         }
+
+    override suspend fun setLoraAdapter(path: String, scale: Float): Unit = withContext(llamaDispatcher) {
+        check(_state.value is InferenceEngine.State.ModelReady) {
+            "LoRA adapter requires a loaded model (${_state.value.javaClass.simpleName})"
+        }
+        if (path.isBlank()) {
+            nativeSetLoraAdapter("", 0.0f)
+        } else {
+            require(File(path).isFile) { "LoRA file not found: $path" }
+            val rc = nativeSetLoraAdapter(path, scale.coerceIn(0.0f, 2.0f))
+            check(rc == 0) { "Failed to apply LoRA adapter: $rc" }
+        }
+        Unit
+    }
+
+    override suspend fun setMmproj(path: String): Unit = withContext(llamaDispatcher) {
+        if (path.isBlank()) {
+            nativeSetMmproj("")
+        } else {
+            require(File(path).isFile) { "mmproj file not found: $path" }
+            check(nativeSetMmproj(path) == 0) { "Failed to configure mmproj" }
+        }
+        Unit
+    }
+
+    override suspend fun analyzeImage(path: String, prompt: String): String = withContext(llamaDispatcher) {
+        require(File(path).isFile) { "Image file not found: $path" }
+        nativeAnalyzeImage(path, prompt).orEmpty()
+    }
+
+    override suspend fun saveContextCache(path: String): Boolean = withContext(llamaDispatcher) {
+        path.isNotBlank() && _state.value is InferenceEngine.State.ModelReady && nativeSaveContextCache(path)
+    }
+
+    override suspend fun loadContextCache(path: String): Boolean = withContext(llamaDispatcher) {
+        path.isNotBlank() && _state.value is InferenceEngine.State.ModelReady && nativeLoadContextCache(path)
+    }
 
     override suspend fun hydrateContext(systemPrompt: String, roles: List<String>, contents: List<String>) =
         withContext(llamaDispatcher) {

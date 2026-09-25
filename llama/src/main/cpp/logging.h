@@ -1,4 +1,4 @@
-// Vendored from ggml-org/llama.cpp `examples/llama.android` (MIT License).
+
 #pragma once
 #include <android/log.h>
 
@@ -50,7 +50,7 @@ static inline int android_log_prio_from_ggml(enum ggml_log_level level) {
 
 static inline void aichat_android_log_callback(enum ggml_log_level level,
                                               const char* text,
-                                              void* /*user*/) {
+                                              void* ) {
     const int prio = android_log_prio_from_ggml(level);
     if (!ai_should_log(prio)) return;
     __android_log_write(prio, LOG_TAG, text);

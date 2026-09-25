@@ -14,6 +14,8 @@
 #include "chat.h"
 #include "common.h"
 #include "llama.h"
+#include "mtmd.h"
+#include "mtmd-helper.h"
 
 template<class T>
 static std::string join(const std::vector<T> &values, const std::string &delim) {
@@ -39,14 +41,17 @@ static llama_context                    * g_context;
 static llama_batch                        g_batch;
 static common_chat_templates_ptr          g_chat_templates;
 static common_sampler                   * g_sampler;
+static llama_adapter_lora               * g_lora = nullptr;
+static mtmd_context                      * g_mtmd = nullptr;
+static std::string                       g_mmproj_path;
 
 static int        g_n_ctx       = DEFAULT_CONTEXT_SIZE;
-static int        g_n_threads   = -1; // -1 = авто
+static int        g_n_threads   = -1;
 static int        g_n_batch     = BATCH_SIZE;
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_init(JNIEnv *env, jobject /*unused*/, jstring nativeLibDir) {
+Java_com_arm_aichat_internal_InferenceEngineImpl_init(JNIEnv *env, jobject , jstring nativeLibDir) {
     llama_log_set(aichat_android_log_callback, nullptr);
 
     const auto *path_to_backend = env->GetStringUTFChars(nativeLibDir, 0);
@@ -55,8 +60,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_init(JNIEnv *env, jobject /*unu
     LOGi("Backends after load_all_from_path: %zu", ggml_backend_reg_count());
 
     if (ggml_backend_reg_count() == 0) {
-        // ggml_backend_load_all_from_path не находит CPU-бэкенды в release-сборке —
-        // грузим варианты вручную и логируем причину отказа
+
         static const char * kCpuVariants[] = {
             "libggml-cpu-android_armv8.0_1.so",
             "libggml-cpu-android_armv8.2_1.so",
@@ -127,7 +131,7 @@ static llama_context *init_context(llama_model *model, const int n_ctx = DEFAULT
     ctx_params.n_ubatch = g_n_batch;
     ctx_params.n_threads = n_threads;
     ctx_params.n_threads_batch = n_threads;
-    // flash attention включён в llama.cpp по умолчанию
+
     auto *context = llama_init_from_model(g_model, ctx_params);
     if (context == nullptr) {
         LOGe("%s: llama_new_context_with_model() returned null)", __func__);
@@ -143,8 +147,8 @@ static common_sampler *new_sampler(float temp) {
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_prepare(JNIEnv * /*env*/, jobject /*unused*/) {
-    auto *context = init_context(g_model);
+Java_com_arm_aichat_internal_InferenceEngineImpl_prepare(JNIEnv * , jobject ) {
+    auto *context = init_context(g_model, g_n_ctx);
     if (!context) { return 1; }
     g_context = context;
     g_batch = llama_batch_init(g_n_batch, 0, 1);
@@ -155,7 +159,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_prepare(JNIEnv * /*env*/, jobje
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_systemInfo(JNIEnv *env, jobject /*unused*/) {
+Java_com_arm_aichat_internal_InferenceEngineImpl_systemInfo(JNIEnv *env, jobject ) {
     return env->NewStringUTF(llama_print_system_info());
 }
 
@@ -173,7 +177,7 @@ static std::string get_backend() {
 
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_benchModel(JNIEnv *env, jobject /*unused*/, jint pp, jint tg,
+Java_com_arm_aichat_internal_InferenceEngineImpl_benchModel(JNIEnv *env, jobject , jint pp, jint tg,
                                                       jint pl, jint nr) {
     auto *context = init_context(g_model, pp);
     if (!context) {
@@ -306,7 +310,7 @@ static std::string chat_add_and_format(const std::string &role, const std::strin
     new_msg.role = role;
     new_msg.content = content;
     auto formatted = common_chat_format_single(
-            g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER, /* use_jinja */ false);
+            g_chat_templates.get(), chat_msgs, new_msg, role == ROLE_USER,  false);
     chat_msgs.push_back(new_msg);
     LOGi("%s: Formatted and added %s message: \n%s\n", __func__, role.c_str(), formatted.c_str());
     return formatted;
@@ -334,7 +338,7 @@ static int decode_tokens_in_batches(
         common_batch_clear(batch);
         LOGv("%s: Preparing a batch size of %d starting at: %d", __func__, cur_batch_size, i);
 
-        if (start_pos + i + cur_batch_size >= DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
+        if (start_pos + i + cur_batch_size >= g_n_ctx - OVERFLOW_HEADROOM) {
             LOGw("%s: Current batch won't fit into context! Shifting...", __func__);
             shift_context();
         }
@@ -359,7 +363,7 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_processSystemPrompt(
         JNIEnv *env,
-        jobject /*unused*/,
+        jobject ,
         jstring jsystem_prompt
 ) {
     reset_long_term_states();
@@ -381,7 +385,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processSystemPrompt(
         LOGv("token: `%s`\t -> `%d`", common_token_to_piece(g_context, id).c_str(), id);
     }
 
-    const int max_batch_size = DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM;
+    const int max_batch_size = g_n_ctx - OVERFLOW_HEADROOM;
     if ((int) system_tokens.size() > max_batch_size) {
         LOGe("%s: System prompt too long for context! %d tokens, max: %d",
              __func__, (int) system_tokens.size(), max_batch_size);
@@ -401,7 +405,7 @@ extern "C"
 JNIEXPORT jint JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_processUserPrompt(
         JNIEnv *env,
-        jobject /*unused*/,
+        jobject ,
         jstring juser_prompt,
         jint n_predict
 ) {
@@ -423,7 +427,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_processUserPrompt(
     }
 
     const int user_prompt_size = (int) user_tokens.size();
-    const int max_batch_size = DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM;
+    const int max_batch_size = g_n_ctx - OVERFLOW_HEADROOM;
     if (user_prompt_size > max_batch_size) {
         const int skipped_tokens = user_prompt_size - max_batch_size;
         user_tokens.resize(max_batch_size);
@@ -473,14 +477,14 @@ static bool is_valid_utf8(const char *string) {
 extern "C"
 JNIEXPORT void JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_applyConfig(
-        JNIEnv * /*env*/,
-        jobject /*unused*/,
+        JNIEnv * ,
+        jobject ,
         jint n_ctx,
         jint n_threads,
         jboolean flash_attn,
         jint n_batch
 ) {
-    (void) flash_attn; // llama.cpp v0.20+: flash attention всегда включён
+    (void) flash_attn;
     if (n_ctx > 0) g_n_ctx = n_ctx;
     g_n_threads = n_threads;
     if (n_batch >= 64) g_n_batch = n_batch;
@@ -490,8 +494,8 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_applyConfig(
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_applySampler(
-        JNIEnv * /*env*/,
-        jobject /*unused*/,
+        JNIEnv * ,
+        jobject ,
         jfloat temp,
         jint top_k,
         jfloat top_p
@@ -517,12 +521,119 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_applySampler(
     return 0;
 }
 
-/** Полностью перестраивает контекст: системный промпт + история сообщений (без генерации). */
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_nativeSetLoraAdapter(
+        JNIEnv *env, jobject, jstring jpath, jfloat scale) {
+    if (g_lora != nullptr) {
+        llama_adapter_lora_free(g_lora);
+        g_lora = nullptr;
+    }
+    if (!g_context) {
+        return 2;
+    }
+    if (jpath == nullptr) {
+        llama_set_adapters_lora(g_context, nullptr, 0, nullptr);
+        return 0;
+    }
+    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    if (path[0] == '\0') {
+        env->ReleaseStringUTFChars(jpath, path);
+        llama_set_adapters_lora(g_context, nullptr, 0, nullptr);
+        return 0;
+    }
+    g_lora = llama_adapter_lora_init(g_model, path);
+    env->ReleaseStringUTFChars(jpath, path);
+    if (!g_lora) {
+        return 1;
+    }
+    llama_adapter_lora *adapters[] = { g_lora };
+    float scales[] = { scale };
+    return llama_set_adapters_lora(g_context, adapters, 1, scales) == 0 ? 0 : 3;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_nativeSetMmproj(
+        JNIEnv *env, jobject, jstring jpath) {
+    if (jpath == nullptr) {
+        g_mmproj_path.clear();
+        return 0;
+    }
+    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    g_mmproj_path = path;
+    if (g_mtmd != nullptr) {
+        mtmd_free(g_mtmd);
+        g_mtmd = nullptr;
+    }
+    if (g_context != nullptr && g_model != nullptr && path[0] != '\0') {
+        mtmd_context_params params = mtmd_context_params_default();
+        params.n_threads = g_n_threads > 0 ? g_n_threads : 4;
+        params.use_gpu = false;
+        g_mtmd = mtmd_init_from_file(path, g_model, params);
+    }
+    env->ReleaseStringUTFChars(jpath, path);
+    return g_context == nullptr ? 2 : (g_mtmd == nullptr && !g_mmproj_path.empty() ? 1 : 0);
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_nativeAnalyzeImage(
+        JNIEnv *env, jobject, jstring jpath, jstring jprompt) {
+    if (jpath == nullptr) return nullptr;
+    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    const char *prompt = jprompt == nullptr ? "" : env->GetStringUTFChars(jprompt, nullptr);
+    std::ostringstream out;
+    out << "Vision input received: " << path << ". ";
+    if (g_mtmd != nullptr) {
+        mtmd_helper_init_opt options = mtmd_helper_init_opt_default();
+        mtmd_helper_bitmap_wrapper wrapper = mtmd_helper_bitmap_init_from_file(
+            g_mtmd, path, false, options);
+        if (wrapper.bitmap != nullptr) {
+            out << "Decoded image " << mtmd_bitmap_get_nx(wrapper.bitmap) << "x"
+                << mtmd_bitmap_get_ny(wrapper.bitmap) << ". ";
+            mtmd_bitmap_free(wrapper.bitmap);
+        } else {
+            out << "Image decode failed. ";
+        }
+    } else if (g_mmproj_path.empty()) {
+        out << "No mmproj configured. ";
+    } else {
+        out << "Projector could not be initialized. ";
+    }
+    out << "Prompt: " << prompt;
+    if (prompt != nullptr) env->ReleaseStringUTFChars(jprompt, const_cast<char *>(prompt));
+    env->ReleaseStringUTFChars(jpath, const_cast<char *>(path));
+    return env->NewStringUTF(out.str().c_str());
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_nativeSaveContextCache(
+        JNIEnv *env, jobject, jstring jpath) {
+    if (!g_context || jpath == nullptr) return JNI_FALSE;
+    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    const bool ok = llama_state_save_file(g_context, path, nullptr, 0);
+    env->ReleaseStringUTFChars(jpath, const_cast<char *>(path));
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_nativeLoadContextCache(
+        JNIEnv *env, jobject, jstring jpath) {
+    if (!g_context || jpath == nullptr) return JNI_FALSE;
+    const char *path = env->GetStringUTFChars(jpath, nullptr);
+    const bool ok = llama_state_load_file(g_context, path, nullptr, 0, nullptr);
+    env->ReleaseStringUTFChars(jpath, const_cast<char *>(path));
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_reshapeContext(
         JNIEnv *env,
-        jobject /*unused*/,
+        jobject ,
         jstring jsystem_prompt,
         jobjectArray jroles,
         jobjectArray jcontents
@@ -562,7 +673,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_reshapeContext(
         env->ReleaseStringUTFChars(jcontent, content);
 
         auto tokens = common_tokenize(g_context, formatted, has_chat_template, has_chat_template);
-        const int max_batch_size = DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM;
+        const int max_batch_size = g_n_ctx - OVERFLOW_HEADROOM;
         if ((int) tokens.size() > max_batch_size) tokens.resize(max_batch_size);
 
         if (decode_tokens_in_batches(g_context, g_batch, tokens, current_position)) {
@@ -580,9 +691,9 @@ extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_generateNextToken(
         JNIEnv *env,
-        jobject /*unused*/
+        jobject
 ) {
-    if (current_position >= DEFAULT_CONTEXT_SIZE - OVERFLOW_HEADROOM) {
+    if (current_position >= g_n_ctx - OVERFLOW_HEADROOM) {
         LOGw("%s: Context full! Shifting...", __func__);
         shift_context();
     }
@@ -629,11 +740,20 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_generateNextToken(
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_unload(JNIEnv * /*unused*/, jobject /*unused*/) {
+Java_com_arm_aichat_internal_InferenceEngineImpl_unload(JNIEnv * , jobject ) {
     reset_long_term_states();
     reset_short_term_states();
 
     common_sampler_free(g_sampler);
+    if (g_lora != nullptr) {
+        llama_adapter_lora_free(g_lora);
+        g_lora = nullptr;
+    }
+    if (g_mtmd != nullptr) {
+        mtmd_free(g_mtmd);
+        g_mtmd = nullptr;
+    }
+    g_mmproj_path.clear();
     g_chat_templates.reset();
     llama_batch_free(g_batch);
     llama_free(g_context);
@@ -642,6 +762,6 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_unload(JNIEnv * /*unused*/, job
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_arm_aichat_internal_InferenceEngineImpl_shutdown(JNIEnv *, jobject /*unused*/) {
+Java_com_arm_aichat_internal_InferenceEngineImpl_shutdown(JNIEnv *, jobject ) {
     llama_backend_free();
 }

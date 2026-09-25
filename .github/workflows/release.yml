@@ -20,7 +20,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Полная история нужна для генерации changelog между тегами.
           fetch-depth: 0
 
       - name: Set up JDK 17
@@ -31,7 +30,6 @@ jobs:
 
       - name: Set up Android SDK (platform, NDK, CMake)
         env:
-          # Путь SDK на виртуальных машинах GitHub Actions
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
@@ -91,7 +89,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "AIL0L ${{ github.ref_name }}"
+          name: "AIIA ${{ github.ref_name }}"
           body_path: CHANGELOG.md
           files: |
             app/build/outputs/apk/release/*.apk

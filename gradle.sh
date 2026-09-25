@@ -1,22 +1,4 @@
 #!/usr/bin/env bash
-#
-# AIL0L · CLI-сборка без Android Studio.
-#
-#   ./gradle.sh [args...]
-#
-# Всё, что скрипт делает сам:
-#   1. Находит JDK 17+ (JAVA_HOME или java в PATH).
-#   2. Находит Android SDK (ANDROID_HOME / ANDROID_SDK_ROOT / local.properties /
-#      типовые пути).
-#   3. Допроверяет/устанавливает нужные компоненты через sdkmanager
-#      (можно отключить INSTALL=0).
-#   4. Пишет local.properties и запускает ./gradlew с переданными аргументами.
-#
-# Примеры:
-#   ./gradle.sh                      -> assembleDebug (debugkka)
-#   ./gradle.sh assembleRelease
-#   ./gradle.sh installDebug         (нужен подключённый adb-устройство)
-#   ./gradle.sh installDebug --reload
 
 set -euo pipefail
 
@@ -25,9 +7,6 @@ cd "$ROOT"
 
 AUTO_INSTALL="${INSTALL:-1}"
 
-# ---------------------------------------------------------------------------
-# 1. JDK
-# ---------------------------------------------------------------------------
 find_java() {
     if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
         echo "$JAVA_HOME/bin/java"; return 0
@@ -61,9 +40,6 @@ fi
 JAVA_VERSION="$("$JAVA_BIN" -version 2>&1 | sed -n '1p')"
 echo "[gradle.sh] Java: $JAVA_VERSION ($JAVA_BIN)"
 
-# ---------------------------------------------------------------------------
-# 2. Android SDK
-# ---------------------------------------------------------------------------
 SDK=""
 if [[ -n "${ANDROID_HOME:-}" && -d "$ANDROID_HOME" ]]; then SDK="$ANDROID_HOME"; fi
 if [[ -z "$SDK" && -n "${ANDROID_SDK_ROOT:-}" && -d "$ANDROID_SDK_ROOT" ]]; then SDK="$ANDROID_SDK_ROOT"; fi
@@ -99,9 +75,6 @@ if [[ ! -f local.properties ]]; then
     echo "[gradle.sh] Создан local.properties"
 fi
 
-# ---------------------------------------------------------------------------
-# 3. Компоненты SDK (список того, что реально нужно)
-# ---------------------------------------------------------------------------
 REQUIRED_COMPONENTS=(
     "platform-tools"
     "platforms;android-35"
@@ -141,9 +114,6 @@ EOF
     fi
 fi
 
-# ---------------------------------------------------------------------------
-# 4. Сборка
-# ---------------------------------------------------------------------------
 if ! command -v "$ROOT/gradlew" >/dev/null 2>&1 && [[ ! -x "$ROOT/gradlew" ]]; then
     echo "[gradle.sh] gradlew не найден — обновите репозиторий (gradle wrapper)."
     exit 1

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22.1)
 
-project("ail0l-llama" VERSION 1.0.0 LANGUAGES C CXX)
+project("aiia-llama" VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED true)
@@ -8,13 +8,9 @@ set(CMAKE_C_STANDARD_REQUIRED true)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 
-# --------------------------------------------------------------------------
-# Pull llama.cpp at configure time (needs git + network on build machine).
-# Vendored ai_chat.cpp below is kept in sync with llama.cpp master.
-# --------------------------------------------------------------------------
 include(FetchContent)
-set(LLAMA_CPP_GIT_TAG "master" CACHE STRING "llama.cpp revision used for the native build")
-message(STATUS "[ail0l-llama] Fetching llama.cpp @ ${LLAMA_CPP_GIT_TAG}")
+set(LLAMA_CPP_GIT_TAG "e6ab7c1a41054a888ada952eab4c886444c2f5ad" CACHE STRING "llama.cpp revision used for the native build")
+message(STATUS "[aiia-llama] Fetching llama.cpp @ ${LLAMA_CPP_GIT_TAG}")
 
 FetchContent_Declare(
     llamacpp
@@ -30,11 +26,8 @@ if(NOT llamacpp_POPULATED)
 endif()
 
 set(LLAMA_SRC ${llamacpp_SOURCE_DIR})
-message(STATUS "[ail0l-llama] llama.cpp source: ${LLAMA_SRC}")
+message(STATUS "[aiia-llama] llama.cpp source: ${LLAMA_SRC}")
 
-# --------------------------------------------------------------------------
-# Android-specific backend tuning (mirrors the official llama.android binding)
-# --------------------------------------------------------------------------
 if(DEFINED ANDROID_ABI)
     message(STATUS "Detected Android ABI: ${ANDROID_ABI}")
     if(ANDROID_ABI STREQUAL "arm64-v8a")
@@ -54,32 +47,31 @@ if(DEFINED ANDROID_ABI)
     endif()
 endif()
 
-# llama.cpp static libraries
+set(LLAMA_BUILD_MTMD ON CACHE BOOL "Build the multimodal mtmd library" FORCE)
 add_subdirectory(${LLAMA_SRC} build-llama)
 
-# --------------------------------------------------------------------------
-# JNI wrapper library
-# --------------------------------------------------------------------------
-add_library(ail0l-llama SHARED
+add_library(aiia-llama SHARED
         ai_chat.cpp)
 
-target_compile_definitions(ail0l-llama PRIVATE
+target_compile_definitions(aiia-llama PRIVATE
         GGML_SYSTEM_ARCH=${GGML_SYSTEM_ARCH}
         GGML_CPU_KLEIDIAI=$<BOOL:${GGML_CPU_KLEIDIAI}>
         GGML_OPENMP=$<BOOL:${GGML_OPENMP}>
 )
 
-target_include_directories(ail0l-llama PRIVATE
+target_include_directories(aiia-llama PRIVATE
         ${LLAMA_SRC}
         ${LLAMA_SRC}/common
         ${LLAMA_SRC}/include
         ${LLAMA_SRC}/ggml/include
-        ${LLAMA_SRC}/ggml/src)
+        ${LLAMA_SRC}/ggml/src
+        ${LLAMA_SRC}/tools/mtmd)
 
-target_link_libraries(ail0l-llama
+target_link_libraries(aiia-llama
         llama
         llama-common
+        mtmd
         android
         log)
 
-install(TARGETS ail0l-llama LIBRARY DESTINATION lib)
+install(TARGETS aiia-llama LIBRARY DESTINATION lib)

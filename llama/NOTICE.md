@@ -1,0 +1,1 @@
+The JNI binding and native sources are derived from ggml-org/llama.cpp examples/llama.android and are distributed under the MIT License. The upstream revision is pinned in `src/main/cpp/CMakeLists.txt`.

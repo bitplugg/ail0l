@@ -1,23 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Монохромный слой адаптивной иконки.
-  Лаунчер (Android 13+) отрисовывает его акцентным цветом системы.
--->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-
     <path
         android:fillColor="#FF000000"
-        android:pathData="M36,40 a10,10 0 0 1 10,-10 h16 a10,10 0 0 1 10,10 v12 a10,10 0 0 1 -10,10 h-14 l-8,8 v-8 h-4 a10,10 0 0 1 -10,-10 z" />
-
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M46,46 h6 v12 h16 v6 h-22 z" />
-
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M70,26 l2,5 5,2 -5,2 -2,5 -2,-5 -5,-2 5,-2 z" />
+        android:fillType="evenOdd"
+        android:pathData="M31,78 L47,28 L61,28 L77,78 L66,78 L62,66 L46,66 L42,78 Z M49,57 L59,57 L54,41 Z" />
 </vector>

@@ -27,6 +27,7 @@ android {
                 arguments += "-DLLAMA_BUILD_TESTS=OFF"
                 arguments += "-DLLAMA_BUILD_EXAMPLES=OFF"
                 arguments += "-DLLAMA_BUILD_COMMON=ON"
+                arguments += "-DLLAMA_BUILD_MTMD=ON"
                 arguments += "-DLLAMA_OPENSSL=OFF"
                 arguments += "-DGGML_NATIVE=OFF"
                 arguments += "-DGGML_BACKEND_DL=ON"

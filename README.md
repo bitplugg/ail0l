@@ -1,9 +1,9 @@
-# AIL0L — ИИ-агент, который развивается вместе с тобой
+# AIIA — ИИ-агент, который развивается вместе с тобой
 
 [![GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
-[![commits](https://img.shields.io/github/commit-activity/m/bitplugg/ail0l)](https://github.com/bitplugg/ail0l/commits)
-[![stars](https://img.shields.io/github/stars/bitplugg/ail0l)](https://github.com/bitplugg/ail0l/stargazers)
-[![release](https://img.shields.io/github/v/release/bitplugg/ail0l)](https://github.com/bitplugg/ail0l/releases)
+[![commits](https://img.shields.io/github/commit-activity/m/bitplugg/aiia)](https://github.com/bitplugg/aiia/commits)
+[![stars](https://img.shields.io/github/stars/bitplugg/aiia)](https://github.com/bitplugg/aiia/stargazers)
+[![release](https://img.shields.io/github/v/release/bitplugg/aiia)](https://github.com/bitplugg/aiia/releases)
 [![platform](https://img.shields.io/badge/platform-Android-green.svg)](https://developer.android.com)
 [![llama.cpp](https://img.shields.io/badge/llama.cpp-ggml--org-orange)](https://github.com/ggml-org/llama.cpp)
 
@@ -114,28 +114,36 @@ GitHub Action `.github/workflows/release.yml` автоматически, при
 ## Структура
 
 ```
-app/src/main/java/com/ail0l/app/
-  agent/            агент: команды памяти, веб-поиск, позови <имя>, контекст,
-                    суммаризация, журнал мыслей
-  ai/               движки (engines/), каталог моделей, загрузчик с HF,
-                    веб-поиск (search/), провизор
-  data/             Room (сущности + DAO + миграции), DataStore-настройки
-  sync/             сетевой канал: MessagingChannel, SyncCoordinator,
-                    SyncWorker (WorkManager), шифрование
-  util/             уведомления, TTS, STT, markdown, AES-GCM, журнал мыслей
-  ui/               Compose: чат, мысли ИИ, модели, память, настройки
-llama/src/main/cpp/ JNI-обвязка llama.cpp (ai_chat.cpp, экспертиза гидратации
-                    контекста: loadModel + hydrateContext вместо prompt-днёрка)
+app/src/main/java/com/aiia/app/
+  agent/            контекст, RAG, KV-кэш, инструменты и MCP
+  ai/               llama.cpp, HF-каталог, GGUF/mmproj и загрузчики
+  api/              foreground Local OpenAI API и P2P HTTP endpoint
+  data/             Room, миграции, DataStore и настройки
+  persona/          персоны и LoRA-профили
+  plugins/          MCP-транспорты и горячая загрузка .dex/.aiip
+  sync/             WorkManager, AES-GCM/PBKDF2, NSD и LAN receive
+  terminal/         ProcessBuilder-сессии Shell/Root/Shizuku
+  ui/               Compose M3: чат, модели, терминал и настройки
+llama/src/main/cpp/ JNI, LoRA, mmproj/mtmd и KV state
+plugins/aiip_sdk/   отдельный SDK и Gradle-шаблон .aiip
 ```
+
+## Новые подсистемы
+
+- Каталог Hugging Face ищет GGUF/mmproj-файлы, определяет Q4_K_M/Q5_K_M/Q8_0,
+  скачивает их с HTTP Range и сохраняет прогресс.
+- Чат принимает изображения из галереи и камеры, передаёт локальные пути в JNI
+  и поддерживает mmproj-проекторы.
+- Терминал, Local OpenAI API, P2P/NSD, RAG ONNX, MCP, подтверждаемые system
+  tools и KV-кэш включены отдельными изолированными слоями.
+- Плагины `.dex/.jar` и `.aiip` загружаются через `DexClassLoader`; права
+  manifest.json подтверждаются в UI.
+- Публичный шаблон: https://github.com/bitplugg/aiia-aiip-template
 
 ## Замечания
 
-- Модуль `llama` тянет llama.cpp через CMake `FetchContent` с ветки `master` —
-  API меняется быстро; если сборка сломалась, зафиксируйте тег
-  (`GIT_TAG v0.4.1` в `llama/src/main/cpp/CMakeLists.txt`).
-- Первый запуск скачивает модель (~0.5–1.8 ГБ в зависимости от устройства) —
-  это задуманное поведение «подстрой под устройство».
-- Сетевой канал не является мессенджером сам по себе: нужен какой-либо
-  сервер/база между устройствами, реализующие REST-контракт `MessagingChannel`
-  (`POST /{device}/messages`, `GET /{device}/messages?after={ts}`).
-- APK собран только для `arm64-v8a` (эмулятор x86_64 не установит).
+- Модуль `llama` использует зафиксированную ревизию llama.cpp и собирает `mtmd`.
+- Первый запуск может скачать модель и ONNX embedding-модель; файлы хранятся в
+  приватном хранилище приложения.
+- API слушает `127.0.0.1:8080`, P2P-приёмник — отдельный LAN-порт 8081.
+- APK собран только для `arm64-v8a`.
