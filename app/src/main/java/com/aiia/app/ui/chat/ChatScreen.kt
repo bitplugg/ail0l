@@ -249,8 +249,16 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     pendingToolCall?.let { call ->
         AlertDialog(
             onDismissRequest = viewModel::rejectTool,
-            title = { Text("Подтвердите инструмент") },
-            text = { Text("${call.name}\n${call.arguments.entries.joinToString("\n") { "${it.key}=${it.value}" }}") },
+            title = { Text(if (call.isMcp) "Подтвердите MCP-вызов" else "Подтвердите инструмент") },
+            text = {
+                Text(
+                    if (call.isMcp) {
+                        "${call.mcpServer}/${call.mcpTool}\n${call.mcpArguments}"
+                    } else {
+                        "${call.name}\n${call.arguments.entries.joinToString("\n") { "${it.key}=${it.value}" }}"
+                    }
+                )
+            },
             confirmButton = { TextButton(onClick = viewModel::approveTool) { Text("Выполнить") } },
             dismissButton = { TextButton(onClick = viewModel::rejectTool) { Text("Отмена") } }
         )

@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aiia.app.ai.Engine
 import com.aiia.app.dm.Dependencies
+import com.aiia.app.plugins.store.PluginStoreViewModel
+import com.aiia.app.plugins.store.StorePlugin
 import java.util.Locale
 
 private enum class SettingsCategory(val title: String, val icon: ImageVector) {
@@ -216,6 +219,9 @@ private fun SystemSettings(s: com.aiia.app.data.Settings, vm: SettingsViewModel)
 private fun ExtensionSettings(s: com.aiia.app.data.Settings, vm: SettingsViewModel) {
     val plugins by Dependencies.plugins.plugins.collectAsState()
     val installState by Dependencies.plugins.state.collectAsState()
+    val storeVm: PluginStoreViewModel = viewModel()
+    val store by storeVm.state.collectAsState()
+    LaunchedEffect(Unit) { storeVm.refresh() }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Плагины .dex/.jar и пакеты .aiip", style = MaterialTheme.typography.titleMedium)
         Text("Загружено плагинов: ${plugins.size}")
@@ -224,6 +230,34 @@ private fun ExtensionSettings(s: com.aiia.app.data.Settings, vm: SettingsViewMod
         Text("Установка пакета требует подтверждения прав из manifest.json.")
         Field("MCP серверы (JSON)", s.mcpServersJson, { vm.setMcp(it) })
         Text("Поддерживаются stdio и HTTP/SSE транспорты MCP.")
+        val mcpRecords by com.aiia.app.plugins.mcp.McpCallJournal.records.collectAsState()
+        if (mcpRecords.isNotEmpty()) {
+            Text("Журнал MCP-вызовов", style = MaterialTheme.typography.titleSmall)
+            mcpRecords.take(5).forEach { record ->
+                Text(
+                    "${if (record.success) "✓" else "✕"} ${record.server}/${record.tool}: ${record.output.take(120)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (record.success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+            }
+        }
+        Text("Магазин AIIA", style = MaterialTheme.typography.titleMedium)
+        Text("bitplugg/aiia-plugin-store · SHA-256 проверяется до установки")
+        OutlinedButton(
+            onClick = storeVm::refresh,
+            enabled = !store.loading,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (store.loading) "Загружаю каталог…" else "Обновить каталог") }
+        store.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        store.notice?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        store.catalog?.plugins.orEmpty().forEach { plugin ->
+            PluginStoreCard(
+                plugin = plugin,
+                installed = plugins.any { it.manifest.id == plugin.id },
+                downloading = store.downloading == plugin.slug,
+                onDownload = { storeVm.download(plugin) }
+            )
+        }
     }
     val pending = installState as? com.aiia.app.plugins.engine.InstallState.AwaitingPermission
     pending?.let {
@@ -262,6 +296,47 @@ private fun AppearanceSettings(s: com.aiia.app.data.Settings, vm: SettingsViewMo
         Toggle("Анимации", s.animationsEnabled, { vm.setAnimations(it) })
         Text("Размер шрифта терминала: ${s.terminalFontSize}")
         Slider(s.terminalFontSize.toFloat(), { vm.setTerminalFontSize(it.toInt()) }, valueRange = 8f..32f)
+    }
+}
+
+@Composable
+private fun PluginStoreCard(
+    plugin: StorePlugin,
+    installed: Boolean,
+    downloading: Boolean,
+    onDownload: () -> Unit
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(plugin.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${plugin.format.uppercase()} · ${plugin.tool} · ${plugin.version}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (installed) Text("Установлен", color = MaterialTheme.colorScheme.primary)
+            }
+            Text(plugin.description, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(
+                onClick = onDownload,
+                enabled = !downloading && !installed,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    when {
+                        installed -> "Установлено"
+                        downloading -> "Загрузка…"
+                        else -> "Скачать и проверить"
+                    }
+                )
+            }
+        }
     }
 }
 

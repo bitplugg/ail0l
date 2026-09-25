@@ -93,14 +93,17 @@ class LocalLlamaEngine(
             val lastMessage = rawThread.lastOrNull()
                 ?: throw IllegalArgumentException("Нет сообщения пользователя")
             val userMessage = lastMessage as? ChatMessage.User
-            val visionContext = userMessage?.images.orEmpty().mapNotNull { image ->
+            val visionPaths = userMessage?.images.orEmpty().mapNotNull { image ->
+                image.uri.takeIf { File(it).isFile }
+            }
+            val visionPath = visionPaths.firstOrNull()
+            val nativeVision = settings.mmprojPath.isNotBlank() && visionPath != null
+            val visionContext = if (nativeVision) "" else visionPaths.mapNotNull { path ->
                 runCatching {
-                    val path = image.uri
-                    if (!File(path).isFile) null
-                    else "Изображение «${image.displayName ?: File(path).name}»: " +
+                    "Изображение «${File(path).name}»: " +
                         engine.analyzeImage(path, "Опиши фото, распознай видимый текст и ответь на вопрос пользователя.")
                 }.getOrNull()
-            }.filterNotNull().joinToString("\n")
+            }.joinToString("\n")
             val userContent = if (visionContext.isBlank()) lastMessage.content
             else "${lastMessage.content}\n\n$visionContext"
             val thread = rawThread.mapIndexed { index, message ->
@@ -130,12 +133,25 @@ class LocalLlamaEngine(
                 if (settings.kvCacheEnabled && key != null) contextCache?.save(engine, key)
             }
 
-            engine.sendUserPrompt(
-                message = user.second,
-                predictLength = predictLength ?: InferenceEngine.DEFAULT_PREDICT_LENGTH
-            )
-                .catch { e -> throw IllegalStateException("Ошибка генерации: ${e.message}", e) }
-                .collect { token -> emit(token) }
+            val visionResult = if (nativeVision) {
+                val builder = StringBuilder()
+                engine.generateWithImage(
+                    path = visionPath,
+                    prompt = user.second,
+                    predictLength = predictLength ?: InferenceEngine.DEFAULT_PREDICT_LENGTH
+                ).collect { token -> builder.append(token) }
+                builder.toString()
+            } else ""
+            if (visionResult.isNotBlank()) {
+                emit(visionResult)
+            } else {
+                engine.sendUserPrompt(
+                    message = user.second,
+                    predictLength = predictLength ?: InferenceEngine.DEFAULT_PREDICT_LENGTH
+                )
+                    .catch { e -> throw IllegalStateException("Ошибка генерации: ${e.message}", e) }
+                    .collect { token -> emit(token) }
+            }
             nativeThread += user
         }
     }.flowOn(Dispatchers.IO)

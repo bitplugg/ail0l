@@ -21,11 +21,12 @@ data class ReleaseInfo(
     val tag: String,
     val name: String,
     val body: String,
-    val apkUrl: String?
+    val apkUrl: String?,
+    val apkSha256: String? = null
 )
 
 object UpdateChecker {
-    private const val REPO = "https://api.github.com/repos/bitplugg/aiia"
+    private const val REPO = "https://api.github.com/repos/bitplugg/ail0l"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -44,14 +45,27 @@ object UpdateChecker {
                 val body = r.body?.string() ?: return@runCatching null
                 val root = Json.parseToJsonElement(body).jsonObject
                 val assets = (root["assets"]?.jsonArray ?: emptyList())
-                val apkUrl = assets.firstOrNull {
+                val apkAsset = assets.firstOrNull {
                     it.jsonObject["name"]?.jsonPrimitive?.contentOrNull?.endsWith(".apk") == true
+                }?.jsonObject
+                val apkUrl = apkAsset?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
+                val shaUrl = assets.firstOrNull {
+                    it.jsonObject["name"]?.jsonPrimitive?.contentOrNull ==
+                        "${apkAsset?.get("name")?.jsonPrimitive?.contentOrNull}.sha256"
                 }?.jsonObject?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
+                val apkSha256 = shaUrl?.let { hashUrl ->
+                    runCatching {
+                        client.newCall(Request.Builder().url(hashUrl).get().build()).execute().use { hashResponse ->
+                            if (!hashResponse.isSuccessful) null else hashResponse.body?.string()?.trim()?.split(Regex("\\s+"))?.firstOrNull()
+                        }
+                    }.getOrNull()
+                }
                 ReleaseInfo(
                     tag = root["tag_name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                     name = root["name"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { root["tag_name"]?.jsonPrimitive?.contentOrNull.orEmpty() },
                     body = root["body"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                    apkUrl = apkUrl
+                    apkUrl = apkUrl,
+                    apkSha256 = apkSha256
                 )
             }
         }.getOrNull()
@@ -70,14 +84,19 @@ object UpdateChecker {
         return false
     }
 
-    suspend fun downloadApk(url: String, file: File): Boolean = withContext(Dispatchers.IO) {
+    suspend fun downloadApk(url: String, file: File, expectedSha256: String? = null): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             val req = Request.Builder().url(url).header("User-Agent", "AIIA/1.0").get().build()
             client.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) return@runCatching false
                 val src = r.body?.byteStream() ?: return@runCatching false
                 file.outputStream().buffered(1 shl 20).use { out -> src.copyTo(out, 1 shl 20) }
-                true
+                if (expectedSha256.isNullOrBlank() || ApkIntegrityVerifier.sha256(file).equals(expectedSha256, ignoreCase = true)) {
+                    true
+                } else {
+                    file.delete()
+                    false
+                }
             }
         }.getOrDefault(false)
     }

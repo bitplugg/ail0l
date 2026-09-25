@@ -236,14 +236,17 @@ private fun AutoUpdateDialog() {
                         scope.launch {
                             val dir = File(context.cacheDir, "update").apply { mkdirs() }
                             val apk = File(dir, "aiia-${r.tag.trimStart('v')}.apk")
-                            val ok = UpdateChecker.downloadApk(url, apk)
+                            val ok = UpdateChecker.downloadApk(url, apk, r.apkSha256)
                             busy = false
                             update = null
                             if (!ok) return@launch
                             if (!ApkInstaller.canRequestPackageInstalls(context)) {
                                 ApkInstaller.openInstallPermissions(context)
                             } else {
-                                ApkInstaller.install(context, apk)
+                                runCatching { ApkInstaller.install(context, apk, r.apkSha256) }
+                                    .onFailure {
+                                        Toast.makeText(context, it.message ?: "APK повреждён", Toast.LENGTH_LONG).show()
+                                    }
                             }
                         }
                     }

@@ -13,8 +13,19 @@ data class PluginManifest(
     val version: String,
     val entryClass: String,
     val permissions: List<PluginPermission> = emptyList(),
-    val apiVersion: Int = 1
-)
+    val apiVersion: Int = 1,
+    val schemaVersion: Int = 1,
+    val minApiVersion: Int = 1,
+    val maxApiVersion: Int = 1
+) {
+    fun compatible(currentApiVersion: Int = PLUGIN_API_VERSION): Boolean =
+        schemaVersion in 1..MAX_SUPPORTED_SCHEMA && currentApiVersion in minApiVersion..maxApiVersion
+
+    companion object {
+        const val PLUGIN_API_VERSION = 1
+        const val MAX_SUPPORTED_SCHEMA = 2
+    }
+}
 
 data class PluginTool(
     val name: String,

@@ -77,6 +77,9 @@ internal class InferenceEngineImpl private constructor(
     private external fun nativeAnalyzeImage(path: String, prompt: String): String?
 
     @FastNative
+    private external fun nativeGenerateWithImage(path: String, prompt: String, predictLength: Int): String?
+
+    @FastNative
     private external fun nativeSaveContextCache(path: String): Boolean
 
     @FastNative
@@ -255,6 +258,14 @@ internal class InferenceEngineImpl private constructor(
         require(File(path).isFile) { "Image file not found: $path" }
         nativeAnalyzeImage(path, prompt).orEmpty()
     }
+
+    override fun generateWithImage(path: String, prompt: String, predictLength: Int): Flow<String> = flow {
+        require(File(path).isFile) { "Image file not found: $path" }
+        val result = withContext(llamaDispatcher) {
+            nativeGenerateWithImage(path, prompt, predictLength.coerceIn(16, 4096)).orEmpty()
+        }
+        if (result.isNotBlank()) emit(result)
+    }.flowOn(llamaDispatcher)
 
     override suspend fun saveContextCache(path: String): Boolean = withContext(llamaDispatcher) {
         path.isNotBlank() && _state.value is InferenceEngine.State.ModelReady && nativeSaveContextCache(path)

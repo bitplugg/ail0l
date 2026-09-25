@@ -54,6 +54,11 @@
         </receiver>
 
         <service
+            android:name=".plugins.sandbox.PluginSandboxService"
+            android:exported="false"
+            android:process=":plugin" />
+
+        <service
             android:name=".api.ApiServerService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

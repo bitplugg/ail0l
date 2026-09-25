@@ -608,6 +608,70 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_nativeAnalyzeImage(
 }
 
 extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_nativeGenerateWithImage(
+        JNIEnv *env, jobject, jstring jpath, jstring jprompt, jint predict_length) {
+    if (jpath == nullptr || g_context == nullptr || g_model == nullptr || g_mtmd == nullptr || g_sampler == nullptr) {
+        return env->NewStringUTF("");
+    }
+
+    const char *path_chars = env->GetStringUTFChars(jpath, nullptr);
+    const char *prompt_chars = jprompt == nullptr ? "" : env->GetStringUTFChars(jprompt, nullptr);
+    const std::string path(path_chars == nullptr ? "" : path_chars);
+    const std::string prompt(prompt_chars == nullptr ? "" : prompt_chars);
+    if (path_chars != nullptr) env->ReleaseStringUTFChars(jpath, path_chars);
+    if (jprompt != nullptr && prompt_chars != nullptr) env->ReleaseStringUTFChars(jprompt, prompt_chars);
+
+    mtmd_helper_init_opt options = mtmd_helper_init_opt_default();
+    mtmd_helper_bitmap_wrapper bitmap = mtmd_helper_bitmap_init_from_file(
+            g_mtmd, path.c_str(), false, options);
+    if (bitmap.bitmap == nullptr) {
+        return env->NewStringUTF("Image decode failed");
+    }
+
+    mtmd_input_text text_part_data;
+    text_part_data.text = prompt.c_str();
+    text_part_data.text_len = prompt.size();
+    text_part_data.add_special = true;
+    text_part_data.parse_special = true;
+    mtmd_input_part text_part = { &text_part_data, nullptr };
+    mtmd_input_part image_part = { nullptr, bitmap.bitmap };
+    const mtmd_input_part * parts[] = { &text_part, &image_part };
+    mtmd_input_chunks * chunks = mtmd_input_chunks_init();
+    if (chunks == nullptr || mtmd_tokenize_from_parts(g_mtmd, chunks, parts, 2, true) != 0) {
+        if (chunks != nullptr) mtmd_input_chunks_free(chunks);
+        mtmd_bitmap_free(bitmap.bitmap);
+        return env->NewStringUTF("Vision tokenization failed");
+    }
+
+    llama_pos new_position = current_position;
+    const int eval_result = mtmd_helper_eval_chunks(
+            g_mtmd, g_context, chunks, current_position, 0, g_n_batch, true, &new_position);
+    mtmd_input_chunks_free(chunks);
+    mtmd_bitmap_free(bitmap.bitmap);
+    if (eval_result != 0) {
+        return env->NewStringUTF("Vision decode failed");
+    }
+
+    current_position = new_position;
+    stop_generation_position = current_position + std::max(16, (int) predict_length);
+    std::string result;
+    for (int i = 0; i < predict_length && current_position < stop_generation_position; i++) {
+        const llama_token token = common_sampler_sample(g_sampler, g_context, -1);
+        common_sampler_accept(g_sampler, token, true);
+        if (llama_vocab_is_eog(llama_model_get_vocab(g_model), token)) break;
+        result += common_token_to_piece(g_context, token);
+        common_batch_clear(g_batch);
+        common_batch_add(g_batch, token, current_position, {0}, true);
+        if (llama_decode(g_context, g_batch) != 0) break;
+        current_position++;
+    }
+    chat_msgs.push_back({ ROLE_USER, prompt });
+    chat_msgs.push_back({ ROLE_ASSISTANT, result });
+    return env->NewStringUTF(result.c_str());
+}
+
+extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_arm_aichat_internal_InferenceEngineImpl_nativeSaveContextCache(
         JNIEnv *env, jobject, jstring jpath) {

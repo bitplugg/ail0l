@@ -365,6 +365,7 @@ class Agent(
             mcp?.tools?.value?.takeIf { it.isNotEmpty() }?.let { tools ->
                 append("\n\nДоступные MCP-инструменты (вызов только через подтверждение пользователя):\n")
                 append(tools.joinToString("\n") { "- ${it.prompt()}" })
+                append("\nФормат вызова: <mcp_call>{\"server\":\"имя\",\"tool\":\"инструмент\",\"arguments\":{}}</mcp_call>")
             }
             if (webResults.isNotEmpty()) {
                 append("\n\nРезультаты веб-поиска. Ответь на запрос пользователя на их основе, " +

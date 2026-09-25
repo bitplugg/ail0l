@@ -7,8 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import com.aiia.app.terminal.TerminalBus
+import com.aiia.app.util.ThoughtLog
 import kotlinx.serialization.json.Json
+import com.aiia.app.plugins.mcp.McpCallJournal
+import com.aiia.app.plugins.mcp.McpManager
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.concurrent.TimeUnit
@@ -16,8 +20,12 @@ import java.util.concurrent.TimeUnit
 data class ToolCall(
     val name: String,
     val arguments: Map<String, String> = emptyMap(),
-    val raw: String = ""
+    val raw: String = "",
+    val mcpServer: String? = null,
+    val mcpTool: String? = null,
+    val mcpArguments: JsonObject? = null
 ) {
+    val isMcp: Boolean get() = mcpServer != null && mcpTool != null
     val command: String get() = arguments["command"].orEmpty()
     val packageName: String get() = arguments["package"].orEmpty()
 }
@@ -27,18 +35,36 @@ data class ToolResult(val success: Boolean, val output: String, val error: Strin
 class ToolCallParser {
     private val json = Json { ignoreUnknownKeys = true }
     private val tagPattern = Regex("<" + "tool_call>(.*?)</" + "tool_call>", RegexOption.DOT_MATCHES_ALL)
+    private val mcpTagPattern = Regex("<" + "mcp_call>(.*?)</" + "mcp_call>", RegexOption.DOT_MATCHES_ALL)
     private val fencePattern = Regex("```(?:json)?\\s*(\\{.*?\\})\\s*```", RegexOption.DOT_MATCHES_ALL)
 
     fun parse(text: String): ToolCall? {
-        val candidate = tagPattern.find(text)?.groupValues?.get(1)
+        val mcpCandidate = mcpTagPattern.find(text)?.groupValues?.get(1)
+        val candidate = mcpCandidate
+            ?: tagPattern.find(text)?.groupValues?.get(1)
             ?: fencePattern.find(text)?.groupValues?.get(1)
             ?: text.trim().takeIf { it.startsWith("{") }
             ?: return null
         return runCatching {
             val obj = json.parseToJsonElement(candidate).jsonObject
-            val name = obj["name"]?.jsonPrimitive?.content ?: obj["tool"]?.jsonPrimitive?.content
-            name?.let {
-                ToolCall(it, obj["arguments"]?.jsonObject?.toMap().orEmpty().mapValues { entry -> entry.value.jsonPrimitive.content }, candidate)
+            val server = obj["server"]?.jsonPrimitive?.content
+            val tool = obj["tool"]?.jsonPrimitive?.content ?: obj["name"]?.jsonPrimitive?.content
+            if (mcpCandidate != null && server != null && tool != null) {
+                ToolCall(
+                    name = "mcp_call",
+                    raw = candidate,
+                    mcpServer = server,
+                    mcpTool = tool,
+                    mcpArguments = obj["arguments"]?.jsonObject ?: buildJsonObject {}
+                )
+            } else {
+                tool?.let {
+                    ToolCall(
+                        it,
+                        obj["arguments"]?.jsonObject?.toMap().orEmpty().mapValues { entry -> entry.value.jsonPrimitive.content },
+                        candidate
+                    )
+                }
             }
         }.getOrNull()
     }
@@ -98,7 +124,9 @@ class SystemToolExecutor(private val context: Context) {
     }.getOrElse { ToolResult(false, "", it.message) }
 }
 
-class ToolConfirmationCoordinator {
+class ToolConfirmationCoordinator(
+    private val mcp: McpManager? = null
+) {
     private val _pending = kotlinx.coroutines.flow.MutableStateFlow<ToolCall?>(null)
     val pending = _pending.asStateFlow()
     private val executor = SystemToolExecutorHolder.executor
@@ -108,6 +136,25 @@ class ToolConfirmationCoordinator {
     suspend fun approve(elevated: Boolean = false): ToolResult? {
         val call = _pending.value ?: return null
         _pending.value = null
+        if (call.isMcp) {
+            val server = call.mcpServer ?: return null
+            val tool = call.mcpTool ?: return null
+            val result = runCatching {
+                val output = mcp?.call(
+                    server,
+                    tool,
+                    call.mcpArguments ?: buildJsonObject {}
+                ).toString()
+                McpCallJournal.record(server, tool, output, true)
+                ThoughtLog.add(ThoughtLog.Tag.TOOL, "MCP $server/$tool: ${output.take(240)}")
+                ToolResult(true, output)
+            }.getOrElse { error ->
+                McpCallJournal.record(server, tool, error.message.orEmpty(), false)
+                ThoughtLog.add(ThoughtLog.Tag.TOOL, "MCP $server/$tool failed: ${error.message.orEmpty()}")
+                ToolResult(false, "", error.message ?: "MCP call failed")
+            }
+            return result
+        }
         return executor?.execute(call, elevated)?.also { result ->
             if (call.name.equals("exec_shell", true)) TerminalBus.publish(call.command, result.output)
         }

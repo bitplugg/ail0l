@@ -14,7 +14,8 @@ object ApkInstaller {
     fun apkUri(context: Context, apk: File): Uri =
         FileProvider.getUriForFile(context, providerAuthority(context), apk)
 
-    fun install(context: Context, apk: File) {
+    fun install(context: Context, apk: File, expectedSha256: String? = null) {
+        ApkIntegrityVerifier.verify(context, apk, expectedSha256 = expectedSha256)
         val uri = apkUri(context, apk)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")

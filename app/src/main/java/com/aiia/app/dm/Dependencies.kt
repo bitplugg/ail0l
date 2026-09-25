@@ -74,7 +74,7 @@ object Dependencies {
         mcp = McpManager()
         plugins = PluginManager(appContext)
         SystemToolExecutorHolder.executor = SystemToolExecutor(appContext)
-        toolConfirmation = ToolConfirmationCoordinator()
+        toolConfirmation = ToolConfirmationCoordinator(mcp)
         syncCoordinator = SyncCoordinator(db, settings, appContext)
         agent = Agent(
             db = db,

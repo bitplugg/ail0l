@@ -37,7 +37,7 @@ tasks.register("packageAiip") {
                 zip.write(bytes)
                 zip.closeEntry()
             }
-            add("manifest.json", "{\"id\":\"example\",\"name\":\"Example\",\"version\":\"1.0\",\"entryClass\":\"com.aiia.plugin.example.ExamplePlugin\",\"permissions\":[],\"apiVersion\":1}".toByteArray())
+            add("manifest.json", "{\"id\":\"example\",\"name\":\"Example\",\"version\":\"1.0\",\"entryClass\":\"com.aiia.plugin.example.ExamplePlugin\",\"permissions\":[],\"apiVersion\":1,\"schemaVersion\":1,\"minApiVersion\":1,\"maxApiVersion\":1}".toByteArray())
             val aar = fileTree(layout.buildDirectory.dir("outputs/aar")).matching { include("*.aar") }.singleFile
             val classesJar = ZipInputStream(aar.inputStream()).use { input ->
                 val out = ByteArrayOutputStream()

@@ -3,13 +3,19 @@ package com.aiia.app.plugins.engine
 import android.content.Context
 import android.os.Environment
 import dalvik.system.DexClassLoader
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import java.io.File
+import com.aiia.app.plugins.sandbox.PluginSandboxClient
+import com.aiia.app.util.ApkIntegrityVerifier
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.zip.ZipInputStream
 
 sealed interface InstallState {
@@ -23,7 +29,7 @@ data class LoadedPlugin(
     val manifest: PluginManifest,
     val plugin: AiiaPlugin,
     val source: File,
-    val classLoader: DexClassLoader
+    val classLoader: ClassLoader? = null
 ) {
     fun close() = Unit
 }
@@ -35,17 +41,36 @@ class PluginManager(private val context: Context) {
     val state: StateFlow<InstallState> = _state.asStateFlow()
     val plugins: StateFlow<List<LoadedPlugin>> = _plugins.asStateFlow()
     private val installed = mutableMapOf<String, LoadedPlugin>()
+    private val sandbox = PluginSandboxClient(context.applicationContext)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun developmentDirectory(): File = File(
         Environment.getExternalStorageDirectory(),
         "AIIA/plugins"
     ).also { if (!it.exists()) it.mkdirs() }
 
-    suspend fun install(file: File): InstallState = withContext(Dispatchers.IO) {
+    suspend fun install(
+        file: File,
+        expectedSha256: String? = null,
+        expectedSigners: List<String> = emptyList()
+    ): InstallState = withContext(Dispatchers.IO) {
         runCatching {
             require(file.isFile) { "Plugin file not found" }
+            val actualHash = ApkIntegrityVerifier.sha256(file)
+            require(expectedSha256.isNullOrBlank() || actualHash.equals(expectedSha256, ignoreCase = true)) {
+                "Plugin SHA-256 mismatch"
+            }
+            if (file.extension.equals("apk", true)) {
+                val integrity = ApkIntegrityVerifier.verify(context, file, expectedPackage = null, expectedSha256 = actualHash)
+                require(expectedSigners.isEmpty() || integrity.signerSha256.any { it in expectedSigners }) {
+                    "Plugin APK signer is not trusted"
+                }
+            }
             val prepared = if (file.extension.equals("aiip", true)) extractPackage(file) else file
             val manifest = readManifest(prepared)
+            require(manifest.compatible()) {
+                "Unsupported plugin schema/API: ${manifest.schemaVersion}/${manifest.apiVersion}"
+            }
             _state.value = InstallState.AwaitingPermission(prepared, manifest)
             InstallState.AwaitingPermission(prepared, manifest)
         }.getOrElse { InstallState.Failed(it.message ?: "Plugin install failed").also { _state.value = it } }
@@ -58,11 +83,9 @@ class PluginManager(private val context: Context) {
             val source = pending.packageFile
             val dex = if (source.isDirectory) File(source, "plugin.dex") else source
             require(dex.isFile) { "plugin.dex is missing" }
-            val optimized = File(context.codeCacheDir, "aiia-plugin-${pending.manifest.id}").also { it.mkdirs() }
-            val loader = DexClassLoader(dex.absolutePath, optimized.absolutePath, null, javaClass.classLoader)
-            val raw = loader.loadClass(pending.manifest.entryClass).getDeclaredConstructor().newInstance()
-            val instance = adapt(raw, pending.manifest)
-            val loaded = LoadedPlugin(pending.manifest, instance, source, loader)
+            val tools = sandbox.install(dex, pending.manifest)
+            val instance = SandboxedPlugin(pending.manifest, sandbox, tools)
+            val loaded = LoadedPlugin(pending.manifest, instance, source)
             installed[pending.manifest.id]?.close()
             installed[pending.manifest.id] = loaded
             _plugins.value = installed.values.toList()
@@ -86,6 +109,7 @@ class PluginManager(private val context: Context) {
 
     fun uninstall(id: String) {
         installed.remove(id)?.close()
+        scope.launch { sandbox.unload(id) }
         _plugins.value = installed.values.toList()
     }
 
@@ -111,40 +135,16 @@ class PluginManager(private val context: Context) {
         return target
     }
 
-    private fun adapt(raw: Any, manifest: PluginManifest): AiiaPlugin {
-        if (raw is AiiaPlugin) return raw
-        val instance: Any = raw
-        val rawClass = instance.javaClass
-        return object : AiiaPlugin {
-            override val manifest: PluginManifest = manifest
-            override fun tools(): List<PluginTool> = runCatching {
-                val method = instance.javaClass.getMethod("tools")
-                val result = method.invoke(instance) as? List<*> ?: emptyList<Any>()
-                result.mapNotNull { item ->
-                    val value = item ?: return@mapNotNull null
-                    val type = value.javaClass
-                    val name = type.getMethod("getName").invoke(value) as? String ?: return@mapNotNull null
-                    val description = type.getMethod("getDescription").invoke(value) as? String ?: ""
-                    val schema = type.getMethod("getInputSchema").invoke(value) as? kotlinx.serialization.json.JsonObject
-                        ?: kotlinx.serialization.json.buildJsonObject {}
-                    PluginTool(name, description, schema)
-                }
-            }.getOrDefault(emptyList())
-            override suspend fun call(name: String, arguments: kotlinx.serialization.json.JsonObject): String = runCatching {
-                val method = rawClass?.getMethod(
-                    "call",
-                    String::class.java,
-                    kotlinx.serialization.json.JsonObject::class.java
-                ) ?: error("plugin call method not found")
-                invokePluginMethod(instance, method, name, arguments)
-            }.getOrElse { it.message ?: "plugin call failed" }
-        }
-    }
-
     private fun readManifest(source: File): PluginManifest {
         val manifestFile = if (source.isDirectory) File(source, "manifest.json") else File(source.parentFile, "${source.nameWithoutExtension}.manifest.json")
-        return if (manifestFile.isFile) json.decodeFromString(PluginManifest.serializer(), manifestFile.readText())
-        else PluginManifest(source.nameWithoutExtension, source.nameWithoutExtension, "0", "", emptyList())
+        return if (manifestFile.isFile) {
+            val migrated = PluginManifestMigrator.migrate(
+                json.parseToJsonElement(manifestFile.readText()).jsonObject
+            )
+            json.decodeFromJsonElement(PluginManifest.serializer(), migrated)
+        } else {
+            PluginManifest(source.nameWithoutExtension, source.nameWithoutExtension, "0", "", emptyList())
+        }
     }
 
     companion object {
@@ -152,10 +152,14 @@ class PluginManager(private val context: Context) {
     }
 }
 
-private fun invokePluginMethod(
-    target: Any,
-    method: java.lang.reflect.Method,
-    name: String,
-    arguments: kotlinx.serialization.json.JsonObject
-): String = method.invoke(target!!, name, arguments).toString()
+private class SandboxedPlugin(
+    override val manifest: PluginManifest,
+    private val client: PluginSandboxClient,
+    private val cachedTools: List<PluginTool>
+) : AiiaPlugin {
+    override fun tools(): List<PluginTool> = cachedTools
+
+    override suspend fun call(name: String, arguments: kotlinx.serialization.json.JsonObject): String =
+        client.call(manifest.id, name, arguments)
+}
 

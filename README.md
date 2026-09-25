@@ -88,8 +88,8 @@ Android package уже используют **AIIA** и `com.aiia.app`.
 
 - Вложения из галереи и камеры сохраняются в `MessageEntity.attachments`.
 - Изображения копируются в приватный cache и передаются в локальный JNI-слой.
-- `mmproj` загружается через mtmd; Vision-модель получает запрос с vision
-  prompt.
+- `mmproj` загружается через mtmd; JPEG/PNG декодируются, embeddings передаются
+  в llama.cpp, а ответ генерируется native VLM-путем.
 - Поддерживаются облачные движки с OpenAI-совместимым vision-форматом, если
   конкретный провайдер принимает такой формат.
 
@@ -128,9 +128,11 @@ Android package уже используют **AIIA** и `com.aiia.app`.
 ### API, MCP и плагины
 
 - Встроенный foreground Local OpenAI API на Ktor.
-- MCP JSON-RPC через stdio и HTTP/SSE.
-- Горячая загрузка `.dex`, `.jar` и `.aiip` через `DexClassLoader`.
-- `manifest.json` с описанием разрешений и API version.
+- MCP JSON-RPC через stdio и HTTP/SSE; вызовы проходят через UI-подтверждение и журнал.
+- Горячая загрузка `.dex`, `.jar` и `.aiip` через изолированный sandbox-процесс.
+- `manifest.json` с описанием разрешений, API/schema version и миграциями.
+- Магазин плагинов: https://bitplugg.github.io/aiia-plugin-store/
+- SHA-256 и certificate fingerprint проверяются перед установкой.
 - Отдельный SDK и готовый шаблон `.aiip` в
   [`bitplugg/aiia-aiip-template`](https://github.com/bitplugg/aiia-aiip-template).
 
@@ -224,6 +226,18 @@ app/build/outputs/apk/release/app-release.apk
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Перед установкой можно проверить целостность и подпись:
+
+```bash
+scripts/verify-apk.sh app/build/outputs/apk/release/app-release.apk
+```
+
+Если Android сообщает о повреждении APK, сначала проверьте package name и
+сертификат: обновление поверх старой версии, подписанной другим ключом,
+требует удаления старой установки. В приложении update-загрузчик теперь
+проверяет SHA-256, package name, версию и signing fingerprint до запуска
+установщика.
 
 Скрипт `gradle.sh` умеет подсказывать путь к SDK и запускать Gradle без
 Android Studio. Первая native-сборка загружает зафиксированную ревизию

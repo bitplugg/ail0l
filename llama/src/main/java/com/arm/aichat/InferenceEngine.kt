@@ -30,6 +30,14 @@ interface InferenceEngine {
 
     suspend fun analyzeImage(path: String, prompt: String = "Опиши изображение и распознай текст"): String = ""
 
+    fun generateWithImage(
+        path: String,
+        prompt: String,
+        predictLength: Int = DEFAULT_PREDICT_LENGTH
+    ): kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.flow {
+        emit(analyzeImage(path, prompt))
+    }
+
 
     suspend fun saveContextCache(path: String): Boolean = false
     suspend fun loadContextCache(path: String): Boolean = false

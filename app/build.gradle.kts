@@ -16,8 +16,12 @@ android {
         applicationId = "com.aiia.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.0.3"
+        versionCode = 4
+        versionName = "0.0.4"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
 
         vectorDrawables {
             useSupportLibrary = true
@@ -25,6 +29,11 @@ android {
     }
 
     signingConfigs {
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = false
+        }
         create("release") {
             val props = Properties()
             val propFile = rootProject.file("keystore.properties")
@@ -37,6 +46,9 @@ android {
                 keyAlias = props.getProperty("keyAlias")
                 keyPassword = props.getProperty("keyPassword")
             }
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = false
         }
     }
 
