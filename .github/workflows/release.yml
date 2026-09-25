@@ -76,7 +76,7 @@ jobs:
           test -s "$APK"
           chmod +x scripts/verify-apk.sh
           ANDROID_SDK_ROOT=/usr/local/lib/android/sdk scripts/verify-apk.sh "$APK" | tee /tmp/aiia-apk-verification.txt
-          sha256sum "$APK" > "$APK.sha256"
+          (cd "$(dirname "$APK")" && sha256sum "$(basename "$APK")" > "$(basename "$APK").sha256")
           cat "$APK.sha256"
 
       - name: Generate changelog
