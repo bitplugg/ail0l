@@ -101,33 +101,33 @@ object UpdateChecker {
         }.getOrDefault(false)
     }
 
-    suspend fun downloadApkToDownloads(context: Context, url: String, tag: String): Uri? =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val name = "aiia-${tag.trimStart('v')}.apk"
-                val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, name)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
-                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                }
-                val resolver = context.contentResolver
-                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                    ?: return@runCatching null
-                val ok = resolver.openOutputStream(uri)?.use { out ->
-                    val req = Request.Builder().url(url).header("User-Agent", "AIIA/1.0").get().build()
-                    client.newCall(req).execute().use { r ->
-                        if (!r.isSuccessful) {
-                            false
-                        } else {
-                            r.body?.byteStream()?.use { it.copyTo(out, 1 shl 20) }
-                            true
-                        }
-                    }
-                } ?: false
-                if (!ok) {
-                    resolver.delete(uri, null, null)
-                    null
-                } else uri
-            }.getOrNull()
-        }
+    suspend fun downloadApkToDownloads(
+        context: Context,
+        url: String,
+        tag: String,
+        expectedSha256: String? = null
+    ): Uri? = withContext(Dispatchers.IO) {
+        runCatching {
+            val temp = File(context.cacheDir, "update/aiia-${tag.trimStart('v')}.apk")
+            if (!downloadApk(url, temp, expectedSha256)) return@runCatching null
+            val name = "aiia-${tag.trimStart('v')}.apk"
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, name)
+                put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: return@runCatching null
+            val copied = resolver.openOutputStream(uri)?.use { out ->
+                temp.inputStream().use { it.copyTo(out, 1 shl 20) }
+                true
+            } ?: false
+            temp.delete()
+            if (!copied) {
+                resolver.delete(uri, null, null)
+                null
+            } else uri
+        }.getOrNull()
+    }
 }

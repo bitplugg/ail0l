@@ -260,7 +260,7 @@ private fun AutoUpdateDialog() {
                             val url = r.apkUrl ?: return@TextButton
                             busy = true
                             scope.launch {
-                                val uri = UpdateChecker.downloadApkToDownloads(context, url, r.tag)
+                                val uri = UpdateChecker.downloadApkToDownloads(context, url, r.tag, r.apkSha256)
                                 busy = false
                                 update = null
                                 if (uri != null) {
