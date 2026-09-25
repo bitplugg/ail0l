@@ -1,6 +1,7 @@
 package com.aiia.app.ai.models
 
 import com.aiia.app.util.Http
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -21,20 +22,45 @@ class HuggingFaceModelsApi(
     suspend fun search(query: String, limit: Int = 50): List<CatalogModel> = withContext(Dispatchers.IO) {
         val q = query.trim()
         if (q.isBlank()) return@withContext emptyList()
-        val url = "$baseUrl?search=${encode(q)}&filter=gguf&limit=${limit.coerceIn(1, 100)}"
-        val body = request(url)
-        val array = runCatching { json.parseToJsonElement(body).jsonArray }.getOrElse { return@withContext emptyList() }
-        array.mapNotNull { element ->
-            val obj = element as? JsonObject ?: return@mapNotNull null
-            val model = runCatching { json.decodeFromJsonElement(HuggingFaceModel.serializer(), obj) }.getOrNull()
-                ?: return@mapNotNull null
-            val artifacts = obj["siblings"]?.jsonArray.orEmpty().mapNotNull { sibling ->
-                val s = sibling as? JsonObject ?: return@mapNotNull null
-                parseArtifact(model.id, s)
+        val bounded = limit.coerceIn(1, 50)
+        val urls = listOf(
+            "$baseUrl?search=${encode(q)}&filter=gguf&blobs=true&limit=$bounded",
+            "$baseUrl?search=${encode(q)}&blobs=true&limit=$bounded"
+        )
+        var array: JsonArray? = null
+        for (url in urls) {
+            val parsed = runCatching {
+                json.parseToJsonElement(request(url)).jsonArray
+            }.getOrNull()
+            if (!parsed.isNullOrEmpty()) {
+                array = parsed
+                break
             }
-            val complete = if (artifacts.isEmpty()) repositoryFiles(model.id) else artifacts
-            CatalogModel(model, complete)
         }
+        val results = buildList {
+            for (element in array.orEmpty()) {
+                val obj = element as? JsonObject ?: continue
+                val model = runCatching {
+                    json.decodeFromJsonElement(HuggingFaceModel.serializer(), obj)
+                }.getOrNull() ?: continue
+                val siblings = runCatching { obj["siblings"]?.jsonArray.orEmpty() }
+                    .getOrDefault(emptyList())
+                val artifacts = siblings.mapNotNull { sibling ->
+                    if (sibling is JsonObject) {
+                        runCatching { parseArtifact(model.id, sibling) }.getOrNull()
+                    } else {
+                        null
+                    }
+                }
+                val complete = if (artifacts.isEmpty()) {
+                    repositoryFilesOrEmpty(model.id)
+                } else {
+                    artifacts
+                }
+                if (complete.isNotEmpty()) add(CatalogModel(model, complete))
+            }
+        }
+        results.distinctBy { it.id }.take(bounded)
     }
 
     suspend fun repositoryFiles(repository: String): List<ModelArtifact> = withContext(Dispatchers.IO) {
@@ -45,6 +71,15 @@ class HuggingFaceModelsApi(
             (item as? JsonObject)?.let { parseArtifact(repository, it) }
         }
     }
+
+    private suspend fun repositoryFilesOrEmpty(repository: String): List<ModelArtifact> =
+        try {
+            repositoryFiles(repository)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
 
     private fun request(url: String): String {
         val request = okhttp3.Request.Builder()
@@ -82,6 +117,6 @@ class HuggingFaceModelsApi(
         )
     }
 
-    private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
+    private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
     private fun encodePath(value: String): String = value.split('/').joinToString("/") { encode(it) }
 }

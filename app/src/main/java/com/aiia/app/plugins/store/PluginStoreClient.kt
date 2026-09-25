@@ -35,7 +35,8 @@ class PluginStoreClient(
     suspend fun download(plugin: StorePlugin, directory: File): DownloadedPlugin = withContext(Dispatchers.IO) {
         val base = catalogUrl.substringBeforeLast('/').substringBeforeLast('/')
         val url = if (plugin.artifact.startsWith("http")) plugin.artifact else "$base/${plugin.artifact}"
-        val target = File(directory, "${plugin.slug}.${plugin.format}")
+        val safeSlug = safeName(plugin.slug)
+        val target = File(directory, "$safeSlug.${plugin.format}")
         val partial = File(directory, "${target.name}.part")
         directory.mkdirs()
         val request = Request.Builder().url(url).header("User-Agent", "AIIA/1.0").get().build()
@@ -45,13 +46,41 @@ class PluginStoreClient(
             body.byteStream().use { input -> partial.outputStream().buffered().use { output -> input.copyTo(output) } }
         }
         val digest = ApkIntegrityVerifier.sha256(partial)
+        if (plugin.format.equals("dex", true) && !plugin.manifest.isNullOrBlank()) {
+            val manifestTarget = File(directory, "$safeSlug.manifest.json")
+            val manifestPartial = File(directory, "${manifestTarget.name}.part")
+            val manifestUrl = if (plugin.manifest.startsWith("http")) plugin.manifest else "$base/${plugin.manifest}"
+            val manifestRequest = Request.Builder()
+                .url(manifestUrl)
+                .header("Accept", "application/json")
+                .header("User-Agent", "AIIA/1.0")
+                .get()
+                .build()
+            Http.client.newCall(manifestRequest).execute().use { response ->
+                if (!response.isSuccessful) throw IOException("Manifest HTTP ${response.code}")
+                val body = response.body ?: throw IOException("Empty manifest response")
+                manifestPartial.writeBytes(body.bytes())
+            }
+            val manifestHash = ApkIntegrityVerifier.sha256(manifestPartial)
+            if (!plugin.manifestSha256.isNullOrBlank() && !manifestHash.equals(plugin.manifestSha256, ignoreCase = true)) {
+                manifestPartial.delete()
+                throw IOException("Manifest SHA-256 mismatch for ${plugin.slug}")
+            }
+            if (manifestTarget.exists()) manifestTarget.delete()
+            if (!manifestPartial.renameTo(manifestTarget)) {
+                manifestPartial.copyTo(manifestTarget, overwrite = true)
+                manifestPartial.delete()
+            }
+        }
         val expectedHash = plugin.sha256?.takeIf { it.isNotBlank() }
         if (expectedHash != null && !digest.equals(expectedHash, ignoreCase = true)) {
             partial.delete()
+            File(directory, "$safeSlug.manifest.json").delete()
             throw IOException("SHA-256 mismatch for ${plugin.slug}")
         }
         if (plugin.sizeBytes > 0 && partial.length() != plugin.sizeBytes) {
             partial.delete()
+            File(directory, "$safeSlug.manifest.json").delete()
             throw IOException("Size mismatch for ${plugin.slug}")
         }
         if (target.exists()) target.delete()
@@ -61,6 +90,9 @@ class PluginStoreClient(
         }
         DownloadedPlugin(target, digest, target.length())
     }
+
+    private fun safeName(value: String): String =
+        value.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "plugin" }
 
     companion object {
         const val DEFAULT_CATALOG_URL = "https://bitplugg.github.io/aiia-plugin-store/catalog/catalog.json"

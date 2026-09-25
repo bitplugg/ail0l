@@ -9,6 +9,7 @@
     <string name="tab_thoughts">Мысли ИИ</string>
     <string name="tab_settings">Настройки</string>
     <string name="tab_terminal">Терминал</string>
+    <string name="tab_more">Ещё</string>
 
     <string name="input_hint">Спроси о чём-нибудь…</string>
     <string name="send">Отправить</string>

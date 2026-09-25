@@ -44,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
@@ -58,6 +59,8 @@ import com.aiia.app.ai.Engine
 import com.aiia.app.dm.Dependencies
 import com.aiia.app.plugins.store.PluginStoreViewModel
 import com.aiia.app.plugins.store.StorePlugin
+import com.aiia.app.terminal.ShizukuBridge
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 private enum class SettingsCategory(val title: String, val icon: ImageVector) {
@@ -71,8 +74,11 @@ private enum class SettingsCategory(val title: String, val icon: ImageVector) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
-    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+fun SettingsScreen(
+    viewModel: SettingsViewModel = viewModel(),
+    initialCategory: String? = null
+) {
+    var selected by rememberSaveable { mutableStateOf(initialCategory) }
     val category = selected?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
     SharedTransitionLayout {
         AnimatedContent(targetState = category, label = "settings-category") { target ->
@@ -201,8 +207,36 @@ private fun NetworkSettings(s: com.aiia.app.data.Settings, vm: SettingsViewModel
 
 @Composable
 private fun SystemSettings(s: com.aiia.app.data.Settings, vm: SettingsViewModel) {
+    val scope = rememberCoroutineScope()
+    var shizukuMessage by remember { mutableStateOf("") }
+    val shizukuReady = ShizukuBridge.isRunning() && ShizukuBridge.hasPermission()
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Toggle("Shizuku", s.shizukuEnabled, { vm.setShizuku(it) })
+        Text(
+            when {
+                shizukuReady -> "Shizuku подключён и разрешение выдано"
+                ShizukuBridge.isRunning() -> "Shizuku запущен — требуется разрешение"
+                else -> "Shizuku не запущен"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (shizukuReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    shizukuMessage = if (ShizukuBridge.requestPermission()) {
+                        "Shizuku готов"
+                    } else {
+                        "Не удалось получить binder или разрешение Shizuku"
+                    }
+                }
+            },
+            enabled = !s.shizukuEnabled || !shizukuReady,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Проверить Shizuku и запросить доступ") }
+        shizukuMessage.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
         Toggle("Root-доступ", s.rootEnabled, { vm.setRoot(it) })
         Toggle("Подтверждать системные вызовы", s.confirmToolCalls, { vm.setConfirmTools(it) })
         Text("Режим терминала", style = MaterialTheme.typography.titleMedium)

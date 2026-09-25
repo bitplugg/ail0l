@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 enum class TerminalMode(val command: List<String>) {
     SHELL(listOf("/system/bin/sh", "-i")),
     ROOT(listOf("/system/bin/su", "-i")),
-    SHIZUKU(listOf("rish", "-i"))
+    SHIZUKU(listOf("/system/bin/sh", "-i"))
 }
 
 data class TerminalStatus(
@@ -46,12 +46,16 @@ class TerminalSession(
         close()
         _status.value = TerminalStatus(mode, running = true)
         runCatching {
-            val builder = ProcessBuilder(mode.command).apply {
-                directory(File(System.getProperty("user.home") ?: "/"))
-                environment()["TERM"] = "xterm-256color"
-                redirectErrorStream(true)
+            val started = if (mode == TerminalMode.SHIZUKU) {
+                ShizukuBridge.startProcess(listOf("/system/bin/sh", "-i"))
+            } else {
+                val builder = ProcessBuilder(mode.command).apply {
+                    directory(File(System.getProperty("user.home") ?: "/"))
+                    environment()["TERM"] = "xterm-256color"
+                    redirectErrorStream(true)
+                }
+                builder.start()
             }
-            val started = builder.start()
             process = started
             writer = PrintWriter(started.outputStream, true)
             readJob = scope.launch {

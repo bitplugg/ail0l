@@ -7,28 +7,38 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Memory
-import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -99,11 +109,9 @@ class MainActivity : ComponentActivity() {
 
 private enum class Tab(val route: String, val labelRes: Int) {
     CHAT("chat", R.string.tab_chat),
-    THOUGHTS("thoughts", R.string.tab_thoughts),
     MODELS("models", R.string.tab_models),
     MEMORY("memory", R.string.tab_memory),
-    SETTINGS("settings", R.string.tab_settings),
-    TERMINAL("terminal", R.string.tab_terminal)
+    MORE("more", R.string.tab_more)
 }
 
 @Composable
@@ -149,29 +157,16 @@ private fun AppRoot(widgetCommand: StateFlow<String?>) {
                                     if (selected) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubbleOutline,
                                     contentDescription = null
                                 )
-
                                 Tab.MODELS -> Icon(
                                     if (selected) Icons.Filled.Memory else Icons.Outlined.Download,
                                     contentDescription = null
                                 )
-
-                                Tab.THOUGHTS -> Icon(
-                                    if (selected) Icons.Filled.Psychology else Icons.Outlined.Psychology,
-                                    contentDescription = null
-                                )
-
                                 Tab.MEMORY -> Icon(
-                                    if (selected) Icons.Filled.Memory else Icons.Outlined.Memory,
+                                    if (selected) Icons.Filled.Psychology else Icons.Outlined.Memory,
                                     contentDescription = null
                                 )
-
-                                Tab.SETTINGS -> Icon(
-                                    if (selected) Icons.Filled.Settings else Icons.Outlined.Settings,
-                                    contentDescription = null
-                                )
-
-                                Tab.TERMINAL -> Icon(
-                                    Icons.Filled.Terminal,
+                                Tab.MORE -> Icon(
+                                    if (selected) Icons.Filled.MoreHoriz else Icons.Outlined.Settings,
                                     contentDescription = null
                                 )
                             }
@@ -188,14 +183,82 @@ private fun AppRoot(widgetCommand: StateFlow<String?>) {
             modifier = Modifier.fillMaxSize().padding(padding)
         ) {
             composable(Tab.CHAT.route) { ChatScreen() }
-            composable(Tab.THOUGHTS.route) { ThoughtsScreen() }
             composable(Tab.MODELS.route) { ModelsScreen() }
             composable(Tab.MEMORY.route) { MemoryScreen() }
-            composable(Tab.SETTINGS.route) { SettingsScreen() }
-            composable(Tab.TERMINAL.route) {
+            composable(Tab.MORE.route) {
+                MoreScreen { route ->
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                    }
+                }
+            }
+            composable("thoughts") { ThoughtsScreen() }
+            composable("settings") { SettingsScreen() }
+            composable("extensions") { SettingsScreen(initialCategory = "EXTENSIONS") }
+            composable("terminal") {
                 TerminalScreen(onBack = { navController.popBackStack() })
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MoreScreen(onOpen: (String) -> Unit) {
+    Scaffold(topBar = { TopAppBar(title = { Text("Ещё") }) }) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                Text(
+                    "AIIA",
+                    style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+                Text(
+                    "Локальный ИИ и инструменты",
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            item {
+                ElevatedCard(onClick = { onOpen("thoughts") }, modifier = Modifier.fillMaxWidth()) {
+                    MoreRow(Icons.Filled.Psychology, "Мысли ИИ", "Контекст и журнал работы")
+                }
+            }
+            item {
+                ElevatedCard(onClick = { onOpen("terminal") }, modifier = Modifier.fillMaxWidth()) {
+                    MoreRow(Icons.Filled.Terminal, "Терминал", "Shell, Root и Shizuku")
+                }
+            }
+            item {
+                ElevatedCard(onClick = { onOpen("extensions") }, modifier = Modifier.fillMaxWidth()) {
+                    MoreRow(Icons.Filled.Extension, "Плагины и MCP", "Store, .dex/.aiip и инструменты")
+                }
+            }
+            item {
+                ElevatedCard(onClick = { onOpen("settings") }, modifier = Modifier.fillMaxWidth()) {
+                    MoreRow(Icons.Filled.Settings, "Настройки", "Движки, память, сеть и интерфейс")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoreRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(18.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+        }
+        Text("›", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
     }
 }
 

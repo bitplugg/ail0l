@@ -54,11 +54,18 @@ class ModelDownloadManager(
             existing = 0
         }
 
-        val builder = Request.Builder().url(artifact.downloadUrl)
+        val builder = Request.Builder()
+            .url(artifact.downloadUrl)
+            .header("Accept-Encoding", "identity")
+            .header("User-Agent", "AIIA/1.0")
         if (token.isNotBlank()) builder.header("Authorization", "Bearer $token")
         if (existing > 0) builder.header("Range", "bytes=$existing-")
         val response = Http.client.newCall(builder.build()).execute()
         response.use { resp ->
+            if (resp.code == 416) {
+                part.delete()
+                throw IOException("Сервер уже считает файл загруженным; начните загрузку заново")
+            }
             if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}: ${resp.body?.string()?.take(240).orEmpty()}")
             val resume = existing > 0 && resp.code == 206
             if (existing > 0 && !resume) {
@@ -93,6 +100,10 @@ class ModelDownloadManager(
                 }
             }
             if (total > 0 && downloaded < total) throw IOException("Загрузка прервана: $downloaded из $total байт")
+            if (artifact.sizeBytes > 0 && downloaded != artifact.sizeBytes) {
+                part.delete()
+                throw IOException("Размер файла не совпадает: $downloaded вместо ${artifact.sizeBytes}")
+            }
             if (target.exists()) target.delete()
             if (!part.renameTo(target)) throw IOException("Не удалось переименовать файл модели")
             artifact.sha256?.let { expected ->

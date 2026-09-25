@@ -132,13 +132,17 @@ Android package уже используют **AIIA** и `com.aiia.app`.
 - Горячая загрузка `.dex`, `.jar` и `.aiip` через изолированный sandbox-процесс.
 - `manifest.json` с описанием разрешений, API/schema version и миграциями.
 - Магазин плагинов: https://bitplugg.github.io/aiia-plugin-store/
+- Для `.dex` из store sidecar-манифест скачивается вместе с артефактом и его
+  `manifestSha256` проверяется до загрузки в sandbox; подтверждённые плагины
+  автоматически восстанавливаются после перезапуска приложения.
 - SHA-256 и certificate fingerprint проверяются перед установкой.
 - Отдельный SDK и готовый шаблон `.aiip` в
   [`bitplugg/aiia-aiip-template`](https://github.com/bitplugg/aiia-aiip-template).
 
 ### Интерфейс
 
-- Material 3 с Dynamic Color.
+- Material 3 / MD3 Expressive с Dynamic Color (Material You).
+- Спокойный Gemini-подобный чат: широкие ответы, пустые состояния и компактный composer.
 - Shared transitions и Compose Motion.
 - Настройки разделены на Engine, Memory, Network, Automation и Advanced.
 - Поддержка light/dark/auto, анимаций, размера шрифта терминала и моноширинного
@@ -397,7 +401,7 @@ AES-256-GCM/PBKDF2-совместимым кодом, который испол�
 
 - обычный shell;
 - root через `su`;
-- Shizuku через `rish`, если сервис Shizuku установлен и разрешён;
+- Shizuku через API `ShizukuProvider` (с `rish`-fallback), если сервис Shizuku установлен и разрешён;
 - ANSI-последовательности и основные control-клавиши;
 - быстрый анализ последнего вывода через AIIA.
 

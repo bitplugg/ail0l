@@ -39,7 +39,12 @@ class PluginStoreViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 val directory = File(getApplication<Application>().filesDir, "plugin-store")
                 val downloaded = client.download(plugin, directory)
-                val installed = Dependencies.plugins.install(downloaded.file, plugin.sha256, plugin.signerSha256)
+                val installed = Dependencies.plugins.install(
+                    downloaded.file,
+                    plugin.sha256,
+                    plugin.signerSha256,
+                    plugin.manifestSha256
+                )
                 Triple(plugin, downloaded, installed)
             }.onSuccess { (plugin, downloaded, installed) ->
                 _state.value = _state.value.copy(

@@ -41,6 +41,7 @@ class PluginManager(private val context: Context) {
     val state: StateFlow<InstallState> = _state.asStateFlow()
     val plugins: StateFlow<List<LoadedPlugin>> = _plugins.asStateFlow()
     private val installed = mutableMapOf<String, LoadedPlugin>()
+    private val approvalPreferences = context.getSharedPreferences("plugin_approvals", Context.MODE_PRIVATE)
     private val sandbox = PluginSandboxClient(context.applicationContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -52,7 +53,8 @@ class PluginManager(private val context: Context) {
     suspend fun install(
         file: File,
         expectedSha256: String? = null,
-        expectedSigners: List<String> = emptyList()
+        expectedSigners: List<String> = emptyList(),
+        expectedManifestSha256: String? = null
     ): InstallState = withContext(Dispatchers.IO) {
         runCatching {
             require(file.isFile) { "Plugin file not found" }
@@ -67,6 +69,12 @@ class PluginManager(private val context: Context) {
                 }
             }
             val prepared = if (file.extension.equals("aiip", true)) extractPackage(file) else file
+            if (!file.extension.equals("aiip", true) && !expectedManifestSha256.isNullOrBlank()) {
+                val sidecar = File(file.parentFile, "${file.nameWithoutExtension}.manifest.json")
+                require(sidecar.isFile && ApkIntegrityVerifier.sha256(sidecar).equals(expectedManifestSha256, ignoreCase = true)) {
+                    "Plugin manifest SHA-256 mismatch"
+                }
+            }
             val manifest = readManifest(prepared)
             require(manifest.compatible()) {
                 "Unsupported plugin schema/API: ${manifest.schemaVersion}/${manifest.apiVersion}"
@@ -88,6 +96,7 @@ class PluginManager(private val context: Context) {
             val loaded = LoadedPlugin(pending.manifest, instance, source)
             installed[pending.manifest.id]?.close()
             installed[pending.manifest.id] = loaded
+            approvalPreferences.edit().putBoolean(pending.manifest.id, true).apply()
             _plugins.value = installed.values.toList()
             InstallState.Installed(loaded).also { _state.value = it }
         }.getOrElse { InstallState.Failed(it.message ?: "Plugin load failed").also { _state.value = it } }
@@ -98,17 +107,25 @@ class PluginManager(private val context: Context) {
     }
 
     suspend fun hotReload(): List<LoadedPlugin> = withContext(Dispatchers.IO) {
+        val extensions = setOf("dex", "jar", "aiip")
         val files = buildList {
-            addAll(developmentDirectory().listFiles()?.filter { it.extension in setOf("dex", "jar", "aiip") }.orEmpty())
-            addAll(context.getExternalFilesDir(null)?.listFiles()?.filter { it.extension in setOf("dex", "jar", "aiip") }.orEmpty())
+            addAll(developmentDirectory().listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
+            addAll(context.getExternalFilesDir(null)?.listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
+            addAll(File(context.filesDir, "plugin-store").listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
+        }.distinctBy { it.absolutePath }
+        files.forEach { file ->
+            val result = install(file)
+            if (result is InstallState.AwaitingPermission && isApproved(result.manifest.id)) {
+                confirmInstall()
+            }
         }
-        files.forEach { install(it) }
         _plugins.value = installed.values.toList()
         _plugins.value
     }
 
     fun uninstall(id: String) {
         installed.remove(id)?.close()
+        approvalPreferences.edit().remove(id).apply()
         scope.launch { sandbox.unload(id) }
         _plugins.value = installed.values.toList()
     }
@@ -134,6 +151,8 @@ class PluginManager(private val context: Context) {
         }
         return target
     }
+
+    private fun isApproved(id: String): Boolean = approvalPreferences.getBoolean(id, false)
 
     private fun readManifest(source: File): PluginManifest {
         val manifestFile = if (source.isDirectory) File(source, "manifest.json") else File(source.parentFile, "${source.nameWithoutExtension}.manifest.json")

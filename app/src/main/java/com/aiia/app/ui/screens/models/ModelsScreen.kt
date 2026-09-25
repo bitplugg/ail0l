@@ -3,6 +3,8 @@ package com.aiia.app.ui.screens.models
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.Locale
@@ -83,6 +87,8 @@ fun ModelsScreen(viewModel: ModelsViewModel = viewModel()) {
                     onValueChange = viewModel::setQuery,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { viewModel.searchHuggingFace() }),
                     label = { Text("Поиск GGUF / Vision на Hugging Face") },
                     placeholder = { Text("например, Qwen2.5-VL") },
                     trailingIcon = {
@@ -91,9 +97,26 @@ fun ModelsScreen(viewModel: ModelsViewModel = viewModel()) {
                         }
                     }
                 )
+                Text(
+                    "Для закрытых репозиториев добавьте Hugging Face token в настройках.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             remoteError?.let { error ->
-                item { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            error,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        TextButton(onClick = viewModel::searchHuggingFace, enabled = !remoteSearching) {
+                            Text("Повторить")
+                        }
+                    }
+                }
             }
             if (remoteSearching) {
                 item { Text("Ищем модели…", style = MaterialTheme.typography.bodyMedium) }

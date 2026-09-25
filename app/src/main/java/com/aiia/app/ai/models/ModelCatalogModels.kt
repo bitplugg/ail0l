@@ -1,29 +1,16 @@
 package com.aiia.app.ai.models
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class HuggingFaceModel(
     val id: String,
     val author: String? = null,
-    val pipelineTag: String? = null,
+    @SerialName("pipeline_tag") val pipelineTag: String? = null,
     val downloads: Long = 0,
     val likes: Long = 0,
-    val tags: List<String> = emptyList(),
-    val siblings: List<HuggingFaceSibling> = emptyList()
-)
-
-@Serializable
-data class HuggingFaceSibling(
-    val rfilename: String,
-    val size: Long = 0,
-    val lfs: HuggingFaceLfs? = null
-)
-
-@Serializable
-data class HuggingFaceLfs(
-    val size: Long = 0,
-    val sha256: String? = null
+    val tags: List<String> = emptyList()
 )
 
 enum class ModelArtifactKind { MODEL, MMPROJ, UNKNOWN }

@@ -9,7 +9,6 @@ import androidx.core.content.FileProvider
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,9 +31,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Mic
@@ -55,8 +56,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -72,6 +71,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -317,6 +317,9 @@ private fun ChatTab(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            if (messages.isEmpty()) {
+                item { GeminiEmptyState { viewModel.setInput(it) } }
+            }
             items(messages, key = { it.id }) { msg ->
                 MessageBubble(msg, clipboardText, viewModel::regenerate)
             }
@@ -336,44 +339,99 @@ private fun ChatTab(
                     AssistChip(
                         onClick = { onRemoveAttachment(image) },
                         label = { Text(image.displayName ?: "Изображение", maxLines = 1) },
-                        trailingIcon = { Icon(Icons.Filled.Add, contentDescription = "Удалить") }
+                        trailingIcon = { Icon(Icons.Filled.Close, contentDescription = "Удалить") }
                     )
                 }
             }
         }
 
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Bottom) {
-            OutlinedTextField(
-                value = input,
-                onValueChange = { viewModel.setInput(it) },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Спроси о чём-нибудь…") },
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = quickMode,
+                    onClick = onToggleQuick,
+                    enabled = !sending,
+                    label = { Text("Быстрый", maxLines = 1) },
+                    leadingIcon = { Icon(Icons.Filled.Bolt, null, modifier = Modifier.height(16.dp)) }
+                )
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = onAddGallery) {
+                    Icon(Icons.Filled.AddAPhoto, contentDescription = "Изображение из галереи")
+                }
+                IconButton(onClick = onAddCamera) {
+                    Icon(Icons.Filled.AddAPhoto, contentDescription = "Снимок камеры")
+                }
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.extraLarge,
-                maxLines = 5
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 2.dp
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { viewModel.setInput(it) },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Спроси о чём-нибудь…") },
+                        shape = MaterialTheme.shapes.large,
+                        maxLines = 5
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = { onMic(false) }) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Голос")
+                    }
+                    FilledIconButton(
+                        onClick = { if (!sending) viewModel.send() },
+                        modifier = Modifier.padding(start = 2.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeminiEmptyState(onSuggestion: (String) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 48.dp, bottom = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            Icons.Filled.AutoAwesome,
+            contentDescription = null,
+            modifier = Modifier.height(42.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text("Добрый день", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "С чем помочь?",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        listOf(
+            "Создать короткий план проекта" to "Составь план запуска моего проекта",
+            "Разобрать документ" to "Помоги разобрать этот документ",
+            "Управлять устройством" to "Покажи доступные системные действия"
+        ).forEach { (label, prompt) ->
+            AssistChip(
+                onClick = { onSuggestion(prompt) },
+                label = { Text(label) },
+                leadingIcon = { Icon(Icons.Filled.AutoAwesome, null, Modifier.height(16.dp)) }
             )
-            Spacer(Modifier.width(6.dp))
-            FilterChip(
-                selected = quickMode,
-                onClick = onToggleQuick,
-                enabled = !sending,
-                label = { Text("Быстрый", maxLines = 1) },
-                leadingIcon = { Icon(Icons.Filled.Bolt, null, modifier = Modifier.height(16.dp)) }
-            )
-            Spacer(Modifier.width(4.dp))
-            IconButton(onClick = onAddGallery) {
-                Icon(Icons.Filled.AddAPhoto, contentDescription = "Изображение из галереи")
-            }
-            IconButton(onClick = onAddCamera) {
-                Icon(Icons.Filled.AddAPhoto, contentDescription = "Снимок камеры")
-            }
-            Spacer(Modifier.width(4.dp))
-            IconButton(onClick = { onMic(false) }) {
-                Icon(Icons.Filled.Mic, contentDescription = "Голос")
-            }
-            Spacer(Modifier.width(4.dp))
-            FilledIconButton(onClick = { if (!sending) viewModel.send() }, modifier = Modifier.align(Alignment.Bottom)) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-            }
         }
     }
 }
@@ -385,12 +443,10 @@ private fun MessageBubble(msg: MessageEntity, clipboardText: (String) -> Unit, o
         Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
             Surface(
                 modifier = Modifier.animateContentSize(spring(stiffness = Spring.StiffnessLow)),
-                color = if (isUser) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant,
+                color = if (isUser) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                 shape = if (isUser)
                     RoundedCornerShape(topStart = 24.dp, topEnd = 8.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
-                else
-                    RoundedCornerShape(topStart = 8.dp, topEnd = 24.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
+                else RoundedCornerShape(0.dp),
             ) {
                 val accent = MaterialTheme.colorScheme.primary
                 Column {
@@ -407,7 +463,10 @@ private fun MessageBubble(msg: MessageEntity, clipboardText: (String) -> Unit, o
                     Text(
                         text = if (isUser) AnnotatedString(msg.content)
                         else Markdown.render(msg.content, accent),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp).widthIn(max = 320.dp),
+                        modifier = Modifier.padding(
+                            horizontal = if (isUser) 16.dp else 0.dp,
+                            vertical = if (isUser) 10.dp else 4.dp
+                        ).widthIn(max = 720.dp),
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
@@ -437,12 +496,12 @@ private fun StreamingBubble(text: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Surface(
             modifier = Modifier.animateContentSize(spring(stiffness = Spring.StiffnessLow)),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 24.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
+            color = Color.Transparent,
+            shape = RoundedCornerShape(0.dp)
         ) {
             Text(
                 text = Markdown.render(text + " ▌", MaterialTheme.colorScheme.primary),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp).widthIn(max = 320.dp),
+                modifier = Modifier.padding(horizontal = 0.dp, vertical = 4.dp).widthIn(max = 720.dp),
                 style = MaterialTheme.typography.bodyLarge
             )
         }

@@ -86,13 +86,13 @@ class SystemToolExecutor(private val context: Context) {
 
     private fun runShell(command: String, elevated: Boolean, shizuku: Boolean): ToolResult {
         if (command.isBlank()) return ToolResult(false, "", "Пустая команда")
-        val executable = when {
-            elevated -> arrayOf("su", "-c", command)
-            shizuku -> arrayOf("rish", "-c", command)
-            else -> arrayOf("sh", "-c", command)
-        }
         return runCatching {
-            val process = ProcessBuilder(*executable).redirectErrorStream(true).start()
+            val process = if (shizuku && !elevated) {
+                com.aiia.app.terminal.ShizukuBridge.startProcess(listOf("/system/bin/sh", "-c", command))
+            } else {
+                val executable = if (elevated) arrayOf("su", "-c", command) else arrayOf("sh", "-c", command)
+                ProcessBuilder(*executable).redirectErrorStream(true).start()
+            }
             process.waitFor(15, TimeUnit.SECONDS)
             if (!process.isAlive) {
                 process.destroyForcibly()

@@ -65,6 +65,7 @@ fun TerminalScreen(onBack: (() -> Unit)? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val session = remember { TerminalSession() }
+    val status by session.status.collectAsState()
     val listState = rememberLazyListState()
     var input by remember { mutableStateOf("") }
     var output by remember { mutableStateOf("") }
@@ -118,9 +119,20 @@ fun TerminalScreen(onBack: (() -> Unit)? = null) {
                         DropdownMenuItem(
                             text = { Text(option.name) },
                             onClick = {
-                                mode = option
                                 modeMenu = false
-                                session.start(option)
+                                if (option == TerminalMode.SHIZUKU) {
+                                    scope.launch {
+                                        if (ShizukuBridge.requestPermission()) {
+                                            mode = option
+                                            session.start(option)
+                                        } else {
+                                            analysis = "Shizuku: запустите сервис Shizuku и выдайте разрешение"
+                                        }
+                                    }
+                                } else {
+                                    mode = option
+                                    session.start(option)
+                                }
                             }
                         )
                     }
@@ -149,6 +161,14 @@ fun TerminalScreen(onBack: (() -> Unit)? = null) {
                     Icon(Icons.Filled.AutoAwesome, contentDescription = null)
                     Text(" Разобрать в AIIA")
                 }
+            }
+            status.error?.let { error ->
+                Text(
+                    error,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
             Surface(
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp),

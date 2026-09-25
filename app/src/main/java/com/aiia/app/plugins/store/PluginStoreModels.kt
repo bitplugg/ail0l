@@ -23,6 +23,7 @@ data class StorePlugin(
     val entryClass: String,
     val artifact: String,
     val manifest: String? = null,
+    val manifestSha256: String? = null,
     val source: String? = null,
     val sha256: String? = null,
     val sizeBytes: Long = 0,
