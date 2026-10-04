@@ -3,8 +3,6 @@ package com.aiia.app.ui.screens.models
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
@@ -26,11 +26,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,151 +50,158 @@ import java.util.Locale
 @Composable
 fun ModelsScreen(viewModel: ModelsViewModel = viewModel()) {
     SharedTransitionLayout {
-    val models by viewModel.models.collectAsState()
-    val provision by viewModel.provisionState.collectAsState()
-    val query by viewModel.query.collectAsState()
-    val remoteModels by viewModel.remoteModels.collectAsState()
-    val remoteSearching by viewModel.remoteSearching.collectAsState()
-    val remoteProgress by viewModel.remoteProgress.collectAsState()
-    val remoteError by viewModel.remoteError.collectAsState()
+        val models by viewModel.models.collectAsState()
+        val provision by viewModel.provisionState.collectAsState()
+        val query by viewModel.query.collectAsState()
+        val remoteModels by viewModel.remoteModels.collectAsState()
+        val remoteSearching by viewModel.remoteSearching.collectAsState()
+        val remoteProgress by viewModel.remoteProgress.collectAsState()
+        val remoteError by viewModel.remoteError.collectAsState()
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Модели") }) }
-    ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Memory, null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Твоё устройство", style = MaterialTheme.typography.titleMedium)
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Text(viewModel.deviceSummary, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-
-            item {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = viewModel::setQuery,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { viewModel.searchHuggingFace() }),
-                    label = { Text("Поиск GGUF / Vision на Hugging Face") },
-                    placeholder = { Text("например, Qwen2.5-VL") },
-                    trailingIcon = {
-                        IconButton(onClick = viewModel::searchHuggingFace, enabled = !remoteSearching && query.isNotBlank()) {
-                            Icon(Icons.Filled.Search, contentDescription = "Найти")
-                        }
-                    }
-                )
-                Text(
-                    "Для закрытых репозиториев добавьте Hugging Face token в настройках.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            remoteError?.let { error ->
+        Scaffold(
+            topBar = { TopAppBar(title = { Text("Модели") }) }
+        ) { padding ->
+            LazyColumn(
+                Modifier.fillMaxSize().padding(padding),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            error,
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        TextButton(onClick = viewModel::searchHuggingFace, enabled = !remoteSearching) {
-                            Text("Повторить")
+                    ElevatedCard(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Memory, null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Твоё устройство", style = MaterialTheme.typography.titleMedium)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(viewModel.deviceSummary, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
-            }
-            if (remoteSearching) {
-                item { Text("Ищем модели…", style = MaterialTheme.typography.bodyMedium) }
-            }
-            if (remoteModels.isNotEmpty()) {
+
+                item {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = viewModel::setQuery,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { viewModel.searchHuggingFace() }),
+                        label = { Text("Поиск GGUF / Vision на Hugging Face") },
+                        placeholder = { Text("например, Qwen2.5-VL") },
+                        trailingIcon = {
+                            IconButton(onClick = viewModel::searchHuggingFace, enabled = !remoteSearching && query.isNotBlank()) {
+                                Icon(Icons.Filled.Search, contentDescription = "Найти")
+                            }
+                        }
+                    )
+                    Text(
+                        "Для закрытых репозиториев добавьте Hugging Face token в настройках.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                remoteError?.let { error ->
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                error,
+                                modifier = Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            TextButton(onClick = viewModel::searchHuggingFace, enabled = !remoteSearching) {
+                                Text("Повторить")
+                            }
+                        }
+                    }
+                }
+                if (remoteSearching) {
+                    item { Text("Ищем модели…", style = MaterialTheme.typography.bodyMedium) }
+                }
+                if (remoteModels.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Результаты Hugging Face",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    items(remoteModels, key = { it.id }) { catalogModel ->
+                        HuggingFaceModelCard(
+                            model = catalogModel,
+                            progress = remoteProgress,
+                            onDownload = viewModel::downloadRemote
+                        )
+                    }
+                }
+
+                when (provision.status) {
+                    "downloading" ->
+                        item {
+                            val p = provision.progress
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            ) {
+                                Column(Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Filled.CloudDownload, null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            "Скачиваем ${provision.entry?.paramsLabel ?: ""}…",
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    if (p != null && p.totalBytes > 0) {
+                                        LinearProgressIndicator(
+                                            progress = { (p.downloadedBytes.toFloat() / p.totalBytes).coerceIn(0f, 1f) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            "${fmt(p.downloadedBytes)} / ${fmt(p.totalBytes)} · ${fmtSpeed(p.speedBps)}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                    "error" ->
+                        item {
+                            Text(
+                                "Не удалось скачать модель. Проверь сеть и место на диске.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    else -> Unit
+                }
+
                 item {
                     Text(
-                        "Результаты Hugging Face",
+                        "Модели под это устройство",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 }
-                items(remoteModels, key = { it.id }) { catalogModel ->
-                    HuggingFaceModelCard(
-                        model = catalogModel,
-                        progress = remoteProgress,
-                        onDownload = viewModel::downloadRemote
+
+                items(models) { m ->
+                    ModelCard(
+                        ui = m,
+                        onInstall = { viewModel.install(m.entry) },
+                        onUse = { viewModel.selectLocal(m.entry) },
+                        onDelete = { viewModel.delete(m.entry) }
                     )
                 }
-            }
-
-            when (provision.status) {
-                "downloading" -> item {
-                    val p = provision.progress
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )) {
-                        Column(Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.CloudDownload, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Скачиваем ${provision.entry?.paramsLabel ?: ""}…",
-                                    style = MaterialTheme.typography.titleMedium)
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            if (p != null && p.totalBytes > 0) {
-                                LinearProgressIndicator(
-                                    progress = { (p.downloadedBytes.toFloat() / p.totalBytes).coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    "${fmt(p.downloadedBytes)} / ${fmt(p.totalBytes)} · ${fmtSpeed(p.speedBps)}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                        }
-                    }
-                }
-
-                "error" -> item {
-                    Text(
-                        "Не удалось скачать модель. Проверь сеть и место на диске.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                else -> Unit
-            }
-
-            item {
-                Text(
-                    "Модели под это устройство",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            items(models) { m ->
-                ModelCard(
-                    ui = m,
-                    onInstall = { viewModel.install(m.entry) },
-                    onUse = { viewModel.selectLocal(m.entry) },
-                    onDelete = { viewModel.delete(m.entry) }
-                )
             }
         }
-    }
     }
 }
 
@@ -253,11 +260,14 @@ private fun HuggingFaceModelCard(
 
 @Composable
 private fun ModelCard(ui: ModelUi, onInstall: () -> Unit, onUse: () -> Unit, onDelete: () -> Unit) {
-    val colors = if (ui.active)
-        CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
-    else CardDefaults.cardColors()
+    val colors =
+        if (ui.active) {
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        } else {
+            CardDefaults.cardColors()
+        }
 
     Card(Modifier.fillMaxWidth(), colors = colors) {
         Column(Modifier.padding(16.dp)) {
@@ -311,7 +321,8 @@ private fun ModelCard(ui: ModelUi, onInstall: () -> Unit, onUse: () -> Unit, onD
                     OutlinedButton(
                         onClick = onDelete,
                         modifier = Modifier.weight(1f),
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        colors =
+                        androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         )
                     ) {
@@ -323,7 +334,8 @@ private fun ModelCard(ui: ModelUi, onInstall: () -> Unit, onUse: () -> Unit, onD
                 OutlinedButton(
                     onClick = onDelete,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    colors =
+                    androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {

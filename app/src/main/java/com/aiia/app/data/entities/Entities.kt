@@ -12,7 +12,8 @@ data class MessageEntity(
     val content: String,
     val attachments: String = "",
     val createdAt: Long = System.currentTimeMillis(),
-    val status: String = "done"
+    val status: String = "done",
+    val reasoning: String = ""
 )
 
 @Entity(tableName = "conversations")

@@ -51,7 +51,8 @@ set(LLAMA_BUILD_MTMD ON CACHE BOOL "Build the multimodal mtmd library" FORCE)
 add_subdirectory(${LLAMA_SRC} build-llama)
 
 add_library(aiia-llama SHARED
-        ai_chat.cpp)
+        ai_chat.cpp
+        pty.cpp)
 
 target_compile_definitions(aiia-llama PRIVATE
         GGML_SYSTEM_ARCH=${GGML_SYSTEM_ARCH}

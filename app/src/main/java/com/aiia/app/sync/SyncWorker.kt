@@ -12,7 +12,6 @@ class SyncWorker(
     appContext: Context,
     params: WorkerParameters
 ) : CoroutineWorker(appContext, params) {
-
     override suspend fun doWork(): Result {
         val db = AppDatabase.get(applicationContext)
         val settingsRepo = SettingsRepository(applicationContext)

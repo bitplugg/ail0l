@@ -1,0 +1,70 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:Agent.kt$Agent$fun send(conversationId: Long, text: String, predictLength: Int? = null, images: List&lt;ImageAttachment&gt; = emptyList()): Flow&lt;Event&gt;</ID>
+    <ID>CyclomaticComplexMethod:ChatScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun ChatScreen(viewModel: ChatViewModel = viewModel())</ID>
+    <ID>CyclomaticComplexMethod:HfDownloader.kt$HfDownloader$fun download(entry: CatalogEntry): Flow&lt;DownloadProgress&gt;</ID>
+    <ID>CyclomaticComplexMethod:LocalLlamaEngine.kt$LocalLlamaEngine$override fun chat(messages: List&lt;ChatMessage&gt;, predictLength: Int?): Flow&lt;String&gt;</ID>
+    <ID>CyclomaticComplexMethod:ModelDownloadManager.kt$ModelDownloadManager$fun download(artifact: ModelArtifact): Flow&lt;ModelDownloadProgress&gt;</ID>
+    <ID>CyclomaticComplexMethod:PluginStoreClient.kt$PluginStoreClient$suspend fun download(plugin: StorePlugin, directory: File): DownloadedPlugin</ID>
+    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$suspend fun syncNow(): SyncReport</ID>
+    <ID>EmptyCatchBlock:Agent.kt$Agent${ }</ID>
+    <ID>EmptyFunctionBlock:Stt.kt$Stt.&lt;no name provided&gt;${}</ID>
+    <ID>ImplicitDefaultLocale:Weather.kt$Weather$String.format("%.0f", this)</ID>
+    <ID>ImplicitDefaultLocale:Weather.kt$Weather$String.format("%.1f", this)</ID>
+    <ID>LabeledExpression:Agent.kt$Agent$@flow</ID>
+    <ID>LabeledExpression:ApiServerService.kt$ApiServerService$@get</ID>
+    <ID>LabeledExpression:ApiServerService.kt$ApiServerService$@post</ID>
+    <ID>LabeledExpression:ChatViewModel.kt$ChatViewModel$@launch</ID>
+    <ID>LabeledExpression:ContextCacheManager.kt$ContextCacheManager$@withContext</ID>
+    <ID>LabeledExpression:Http.kt$@withContext</ID>
+    <ID>LabeledExpression:HttpMcpTransport.kt$HttpMcpTransport$@mapNotNull</ID>
+    <ID>LabeledExpression:HuggingFaceModelsApi.kt$HuggingFaceModelsApi$@withContext</ID>
+    <ID>LabeledExpression:ImageStorage.kt$ImageStorage$@runCatching</ID>
+    <ID>LabeledExpression:MainActivity.kt$@Button</ID>
+    <ID>LabeledExpression:MainActivity.kt$@LaunchedEffect</ID>
+    <ID>LabeledExpression:MainActivity.kt$@TextButton</ID>
+    <ID>LabeledExpression:MainActivity.kt$@launch</ID>
+    <ID>LabeledExpression:ModelDownloadManager.kt$ModelDownloadManager$@flow</ID>
+    <ID>LabeledExpression:P2pReceiver.kt$P2pReceiver$@forEach</ID>
+    <ID>LabeledExpression:PersonaRepository.kt$PersonaRepository$@withLock</ID>
+    <ID>LabeledExpression:PluginManager.kt$PluginManager$@withContext</ID>
+    <ID>LabeledExpression:PluginSandboxClient.kt$PluginSandboxClient$@mapNotNull</ID>
+    <ID>LabeledExpression:ProvisionManager.kt$ProvisionManager$@launch</ID>
+    <ID>LabeledExpression:StdioMcpTransport.kt$StdioMcpTransport$@mapNotNull</ID>
+    <ID>LabeledExpression:StdioMcpTransport.kt$StdioMcpTransport$@synchronized</ID>
+    <ID>LabeledExpression:TerminalScreen.kt$@Button</ID>
+    <ID>LabeledExpression:UpdateChecker.kt$UpdateChecker$@runCatching</ID>
+    <ID>LabeledExpression:VectorSearchEngine.kt$VectorSearchEngine$@withContext</ID>
+    <ID>LabeledExpression:Weather.kt$Weather$@use</ID>
+    <ID>LabeledExpression:Weather.kt$Weather$@withContext</ID>
+    <ID>LabeledExpression:WebSearch.kt$WebSearch$@mapNotNull</ID>
+    <ID>LabeledExpression:WebSearch.kt$WebSearch$@withContext</ID>
+    <ID>LongMethod:Agent.kt$Agent$fun send(conversationId: Long, text: String, predictLength: Int? = null, images: List&lt;ImageAttachment&gt; = emptyList()): Flow&lt;Event&gt;</ID>
+    <ID>LongMethod:ApiServerService.kt$ApiServerService$private fun startServer(bindPort: Int)</ID>
+    <ID>LongMethod:ChatScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun ChatScreen(viewModel: ChatViewModel = viewModel())</ID>
+    <ID>LongMethod:ChatScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun ChatTab( viewModel: ChatViewModel, input: String, sending: Boolean, quickMode: Boolean, onToggleQuick: () -&gt; Unit, attachments: List&lt;com.aiia.app.ai.ImageAttachment&gt;, onAddGallery: () -&gt; Unit, onAddCamera: () -&gt; Unit, onRemoveAttachment: (com.aiia.app.ai.ImageAttachment) -&gt; Unit, onMic: (Boolean) -&gt; Unit, clipboardText: (String) -&gt; Unit )</ID>
+    <ID>LongMethod:LocalLlamaEngine.kt$LocalLlamaEngine$override fun chat(messages: List&lt;ChatMessage&gt;, predictLength: Int?): Flow&lt;String&gt;</ID>
+    <ID>LongMethod:MainActivity.kt$@Composable private fun AppRoot(widgetCommand: StateFlow&lt;String?&gt;)</ID>
+    <ID>LongMethod:MainActivity.kt$@Composable private fun AutoUpdateDialog()</ID>
+    <ID>LongMethod:ModelDownloadManager.kt$ModelDownloadManager$fun download(artifact: ModelArtifact): Flow&lt;ModelDownloadProgress&gt;</ID>
+    <ID>LongMethod:ModelsScreen.kt$@Composable private fun ModelCard(ui: ModelUi, onInstall: () -&gt; Unit, onUse: () -&gt; Unit, onDelete: () -&gt; Unit)</ID>
+    <ID>LongMethod:ModelsScreen.kt$@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class) @Composable fun ModelsScreen(viewModel: ModelsViewModel = viewModel())</ID>
+    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$suspend fun syncNow(): SyncReport</ID>
+    <ID>LongMethod:TerminalScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun TerminalScreen(onBack: (() -&gt; Unit)? = null)</ID>
+    <ID>LongParameterList:ChatScreen.kt$( viewModel: ChatViewModel, input: String, sending: Boolean, quickMode: Boolean, onToggleQuick: () -&gt; Unit, attachments: List&lt;com.aiia.app.ai.ImageAttachment&gt;, onAddGallery: () -&gt; Unit, onAddCamera: () -&gt; Unit, onRemoveAttachment: (com.aiia.app.ai.ImageAttachment) -&gt; Unit, onMic: (Boolean) -&gt; Unit, clipboardText: (String) -&gt; Unit )</ID>
+    <ID>LoopWithTooManyJumpStatements:HuggingFaceModelsApi.kt$HuggingFaceModelsApi$for</ID>
+    <ID>LoopWithTooManyJumpStatements:MemoryManager.kt$MemoryManager$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ReminderParser.kt$ReminderParser$for</ID>
+    <ID>LoopWithTooManyJumpStatements:StdioMcpTransport.kt$StdioMcpTransport$while</ID>
+    <ID>ReturnCount:ReminderParser.kt$ReminderParser$fun parse(text: String, now: Long = System.currentTimeMillis()): Request?</ID>
+    <ID>TooManyFunctions:AppDao.kt$AppDao</ID>
+    <ID>UnusedParameter:Agent.kt$Agent$settings: Settings</ID>
+    <ID>UnusedParameter:UsageLog.kt$UsageLog$context: Context</ID>
+    <ID>UnusedPrivateProperty:Agent.kt$Agent$var openAiEnabled = false</ID>
+    <ID>UnusedPrivateProperty:PluginSandboxClient.kt$PluginSandboxClient$private val callbackHandler = Handler(Looper.getMainLooper())</ID>
+    <ID>UnusedPrivateProperty:TerminalScreen.kt$val context = androidx.compose.ui.platform.LocalContext.current</ID>
+    <ID>UnusedPrivateProperty:VectorSearchEngine.kt$VectorSearchEngine$private val json = Json { ignoreUnknownKeys = true }</ID>
+  </CurrentIssues>
+</SmellBaseline>

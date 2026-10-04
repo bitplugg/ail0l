@@ -27,11 +27,12 @@ data class ModelArtifact(
     val isGguf: Boolean get() = filename.endsWith(".gguf", ignoreCase = true)
     val isVisionProjector: Boolean get() = kind == ModelArtifactKind.MMPROJ
     val displaySize: String
-        get() = when {
-            sizeBytes >= 1_073_741_824 -> "%.2f GB".format(sizeBytes / 1_073_741_824.0)
-            sizeBytes >= 1_048_576 -> "%.1f MB".format(sizeBytes / 1_048_576.0)
-            else -> "$sizeBytes B"
-        }
+        get() =
+            when {
+                sizeBytes >= 1_073_741_824 -> "%.2f GB".format(sizeBytes / 1_073_741_824.0)
+                sizeBytes >= 1_048_576 -> "%.1f MB".format(sizeBytes / 1_048_576.0)
+                else -> "$sizeBytes B"
+            }
 }
 
 data class CatalogModel(
@@ -44,7 +45,11 @@ data class CatalogModel(
 }
 
 enum class Quantization(val label: String) {
-    Q4_K_M("Q4_K_M"), Q5_K_M("Q5_K_M"), Q8_0("Q8_0"), OTHER("Other");
+    Q4_K_M("Q4_K_M"),
+    Q5_K_M("Q5_K_M"),
+    Q8_0("Q8_0"),
+    OTHER("Other")
+    ;
 
     companion object {
         fun fromFileName(name: String): Quantization {

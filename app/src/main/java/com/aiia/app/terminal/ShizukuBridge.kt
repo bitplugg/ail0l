@@ -1,10 +1,10 @@
 package com.aiia.app.terminal
 
 import android.content.pm.PackageManager
+import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeout
 import rikka.shizuku.Shizuku
-import java.io.File
 
 object ShizukuBridge {
     private const val REQUEST_CODE = 0x51A
@@ -22,9 +22,13 @@ object ShizukuBridge {
         val listener = Shizuku.OnBinderReceivedListener { ready.complete(Unit) }
         return try {
             Shizuku.addBinderReceivedListenerSticky(listener)
-            if (isRunning()) true else withTimeout(timeoutMs) {
-                ready.await()
-                isRunning()
+            if (isRunning()) {
+                true
+            } else {
+                withTimeout(timeoutMs) {
+                    ready.await()
+                    isRunning()
+                }
             }
         } catch (_: Exception) {
             false
@@ -37,9 +41,10 @@ object ShizukuBridge {
         if (!awaitBinder() || !isRunning()) return false
         if (hasPermission()) return true
         val result = CompletableDeferred<Boolean>()
-        val listener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
-            if (requestCode == REQUEST_CODE) result.complete(grantResult == PERMISSION_GRANTED)
-        }
+        val listener =
+            Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+                if (requestCode == REQUEST_CODE) result.complete(grantResult == PERMISSION_GRANTED)
+            }
         Shizuku.addRequestPermissionResultListener(listener)
         return try {
             Shizuku.requestPermission(REQUEST_CODE)
@@ -54,14 +59,15 @@ object ShizukuBridge {
     fun startProcess(command: List<String>, workingDirectory: File? = null): Process {
         check(isRunning()) { "Shizuku service is not running" }
         check(hasPermission()) { "Shizuku permission is not granted" }
-        val method = runCatching {
-            Shizuku::class.java.getDeclaredMethod(
-                "newProcess",
-                Array<String>::class.java,
-                Array<String>::class.java,
-                String::class.java
-            ).apply { isAccessible = true }
-        }.getOrNull()
+        val method =
+            runCatching {
+                Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                ).apply { isAccessible = true }
+            }.getOrNull()
         if (method != null) {
             return method.invoke(
                 null,
@@ -71,11 +77,12 @@ object ShizukuBridge {
             ) as Process
         }
 
-        val rishCommand = if (command.size >= 3 && command[1] == "-c") {
-            listOf("rish", "-c", command.drop(2).joinToString(" "))
-        } else {
-            listOf("rish", "-i")
-        }
+        val rishCommand =
+            if (command.size >= 3 && command[1] == "-c") {
+                listOf("rish", "-c", command.drop(2).joinToString(" "))
+            } else {
+                listOf("rish", "-i")
+            }
         return ProcessBuilder(*rishCommand.toTypedArray()).apply {
             workingDirectory?.let { directory(it) }
             redirectErrorStream(true)

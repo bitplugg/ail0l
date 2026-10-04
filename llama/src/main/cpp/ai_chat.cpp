@@ -5,6 +5,7 @@
 #include <jni.h>
 #include <dlfcn.h>
 #include <iomanip>
+#include <mutex>
 #include <cmath>
 #include <string>
 #include <unistd.h>
@@ -44,6 +45,8 @@ static common_sampler                   * g_sampler;
 static llama_adapter_lora               * g_lora = nullptr;
 static mtmd_context                      * g_mtmd = nullptr;
 static std::string                       g_mmproj_path;
+
+static std::mutex g_sampler_lock;  // guards g_sampler across sampler rebuilds
 
 static int        g_n_ctx       = DEFAULT_CONTEXT_SIZE;
 static int        g_n_threads   = -1;
@@ -504,6 +507,7 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_applySampler(
         LOGe("%s: model not loaded", __func__);
         return 1;
     }
+    std::lock_guard<std::mutex> guard(g_sampler_lock);
     if (g_sampler) {
         common_sampler_free(g_sampler);
         g_sampler = nullptr;
@@ -518,6 +522,43 @@ Java_com_arm_aichat_internal_InferenceEngineImpl_applySampler(
         return 1;
     }
     LOGi("%s: sampler temp=%.2f top_k=%d top_p=%.2f", __func__, sparams.temp, sparams.top_k, sparams.top_p);
+    return 0;
+}
+
+// common_sampler is only defined in sampling.cpp, so the grammar goes through the public
+// common_params_sampling field and the chain is rebuilt by common_sampler_init.
+static void apply_grammar(const char *grammar_text) {
+    std::lock_guard<std::mutex> guard(g_sampler_lock);
+    if (g_sampler != nullptr) {
+        common_sampler_free(g_sampler);
+        g_sampler = nullptr;
+    }
+    common_params_sampling sparams;
+    sparams.temp = DEFAULT_SAMPLER_TEMP;
+    if (grammar_text != nullptr && grammar_text[0] != '\0') {
+        sparams.grammar = common_grammar(COMMON_GRAMMAR_TYPE_USER, grammar_text);
+    }
+    g_sampler = common_sampler_init(g_model, sparams);
+    if (g_sampler == nullptr) {
+        LOGe("%s: failed to init sampler", __func__);
+        return;
+    }
+    LOGi("%s: %s", __func__, sparams.grammar.empty() ? "grammar cleared" : "GBNF constraint applied");
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_com_arm_aichat_internal_InferenceEngineImpl_applyGrammar(
+        JNIEnv *env,
+        jobject ,
+        jstring jgrammar) {
+    if (!g_model) {
+        LOGe("%s: model not loaded", __func__);
+        return 1;
+    }
+    const char *grammar = jgrammar != nullptr ? env->GetStringUTFChars(jgrammar, nullptr) : nullptr;
+    apply_grammar(grammar);
+    if (grammar != nullptr) env->ReleaseStringUTFChars(jgrammar, grammar);
     return 0;
 }
 

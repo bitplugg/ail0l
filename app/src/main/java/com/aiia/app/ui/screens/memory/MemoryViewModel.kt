@@ -9,12 +9,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class MemoryViewModel(app: android.app.Application) : AndroidViewModel(app) {
-
     private val dao = Dependencies.db.dao()
 
     private val _query = MutableStateFlow("")

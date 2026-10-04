@@ -10,26 +10,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class NetworkMonitor(context: Context, private val onConnected: () -> Unit) {
-
     private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
     private val _connected = MutableStateFlow(isCurrentlyConnected())
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
-    private val callback = object : NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            _connected.value = true
-            onConnected()
-        }
+    private val callback =
+        object : NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                _connected.value = true
+                onConnected()
+            }
 
-        override fun onLost(network: Network) {
-            _connected.value = isCurrentlyConnected()
-        }
+            override fun onLost(network: Network) {
+                _connected.value = isCurrentlyConnected()
+            }
 
-        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-            _connected.value = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                _connected.value = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            }
         }
-    }
 
     fun start() {
         cm.registerDefaultNetworkCallback(callback)

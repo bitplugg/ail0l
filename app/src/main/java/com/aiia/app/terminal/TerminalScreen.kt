@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -31,9 +30,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,10 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aiia.app.agent.Agent
 import com.aiia.app.dm.Dependencies
-import com.aiia.app.terminal.TerminalBus
-import com.aiia.app.terminal.TerminalControl
-import com.aiia.app.terminal.TerminalMode
-import com.aiia.app.terminal.TerminalSession
 import kotlinx.coroutines.launch
 
 private val ansiPattern = Regex("\u001B\\[[;\\d]*[ -/]*[@-~]")
@@ -142,12 +137,14 @@ fun TerminalScreen(onBack: (() -> Unit)? = null) {
                         val text = output.takeLast(12_000)
                         if (text.isBlank()) return@Button
                         scope.launch {
-                            val id = Dependencies.db.dao().insertConversation(
-                                com.aiia.app.data.entities.ConversationEntity(title = "Разбор терминала")
-                            )
+                            val id =
+                                Dependencies.db.dao().insertConversation(
+                                    com.aiia.app.data.entities.ConversationEntity(title = "Разбор терминала")
+                                )
                             val prompt = "Разбери логи терминала, найди ошибки и объясни следующие безопасные действия:\n$text"
                             Dependencies.agent.send(id, prompt).collect { event ->
                                 when (event) {
+                                    is Agent.Event.Thinking -> Unit
                                     is Agent.Event.Token -> analysis += event.text
                                     is Agent.Event.Done -> analysis = event.full
                                     is Agent.Event.Failure -> analysis = event.message
@@ -180,10 +177,20 @@ fun TerminalScreen(onBack: (() -> Unit)? = null) {
                     modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState()),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp)
                 ) {
-                    item { Text(ansiAnnotated(output), color = Color(0xFFD7E0EA), fontFamily = FontFamily.Monospace, fontSize = (settings?.terminalFontSize ?: 14).sp) }
+                    item {
+                        Text(
+                            ansiAnnotated(output),
+                            color = Color(0xFFD7E0EA),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = (settings?.terminalFontSize ?: 14).sp
+                        )
+                    }
                 }
             }
-            LazyColumn(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+            LazyColumn(
+                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+            ) {
                 item {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TerminalControl.entries.forEach { control ->
@@ -229,13 +236,14 @@ private fun ansiAnnotated(value: String): AnnotatedString = buildAnnotatedString
     ansiPattern.findAll(value).forEach { match ->
         append(value.substring(cursor, match.range.first))
         val code = match.value
-        val color = when {
-            code.contains("31") -> Color(0xFFFF6B6B)
-            code.contains("32") -> Color(0xFF7EE787)
-            code.contains("33") -> Color(0xFFFFD866)
-            code.contains("34") -> Color(0xFF79C0FF)
-            else -> Color(0xFFD7E0EA)
-        }
+        val color =
+            when {
+                code.contains("31") -> Color(0xFFFF6B6B)
+                code.contains("32") -> Color(0xFF7EE787)
+                code.contains("33") -> Color(0xFFFFD866)
+                code.contains("34") -> Color(0xFF79C0FF)
+                else -> Color(0xFFD7E0EA)
+            }
         withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold)) { append("") }
         cursor = match.range.last + 1
     }

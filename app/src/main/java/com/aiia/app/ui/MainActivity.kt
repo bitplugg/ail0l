@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubble
@@ -52,31 +51,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.aiia.app.R
 import com.aiia.app.dm.Dependencies
+import com.aiia.app.terminal.TerminalScreen
 import com.aiia.app.ui.chat.ChatScreen
 import com.aiia.app.ui.chat.ChatViewModel
 import com.aiia.app.ui.screens.memory.MemoryScreen
 import com.aiia.app.ui.screens.models.ModelsScreen
-import com.aiia.app.ui.settings.SettingsScreen
-import com.aiia.app.terminal.TerminalScreen
 import com.aiia.app.ui.screens.thoughts.ThoughtsScreen
+import com.aiia.app.ui.settings.SettingsScreen
 import com.aiia.app.ui.theme.AiiaTheme
 import com.aiia.app.util.ApkInstaller
 import com.aiia.app.util.ReleaseInfo
 import com.aiia.app.util.UpdateChecker
 import com.aiia.app.widget.QuickCommandWidget
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 
 class MainActivity : ComponentActivity() {
-
     private val widgetCommand = MutableStateFlow<String?>(null)
 
     override fun onNewIntent(intent: Intent) {
@@ -90,13 +89,13 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(QuickCommandWidget.EXTRA_COMMAND)?.let { widgetCommand.value = it }
         enableEdgeToEdge()
         setContent {
-
             val settings by Dependencies.settings.settings.collectAsState(initial = null)
-            val darkTheme = when (settings?.systemDark) {
-                "light" -> false
-                "dark" -> true
-                else -> isSystemInDarkTheme()
-            }
+            val darkTheme =
+                when (settings?.systemDark) {
+                    "light" -> false
+                    "dark" -> true
+                    else -> isSystemInDarkTheme()
+                }
             AiiaTheme(
                 darkTheme = darkTheme,
                 dynamicColor = settings?.dynamicColor ?: true
@@ -153,22 +152,26 @@ private fun AppRoot(widgetCommand: StateFlow<String?>) {
                         icon = {
                             val selected = selected == index
                             when (tab) {
-                                Tab.CHAT -> Icon(
-                                    if (selected) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubbleOutline,
-                                    contentDescription = null
-                                )
-                                Tab.MODELS -> Icon(
-                                    if (selected) Icons.Filled.Memory else Icons.Outlined.Download,
-                                    contentDescription = null
-                                )
-                                Tab.MEMORY -> Icon(
-                                    if (selected) Icons.Filled.Psychology else Icons.Outlined.Memory,
-                                    contentDescription = null
-                                )
-                                Tab.MORE -> Icon(
-                                    if (selected) Icons.Filled.MoreHoriz else Icons.Outlined.Settings,
-                                    contentDescription = null
-                                )
+                                Tab.CHAT ->
+                                    Icon(
+                                        if (selected) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubbleOutline,
+                                        contentDescription = null
+                                    )
+                                Tab.MODELS ->
+                                    Icon(
+                                        if (selected) Icons.Filled.Memory else Icons.Outlined.Download,
+                                        contentDescription = null
+                                    )
+                                Tab.MEMORY ->
+                                    Icon(
+                                        if (selected) Icons.Filled.Psychology else Icons.Outlined.Memory,
+                                        contentDescription = null
+                                    )
+                                Tab.MORE ->
+                                    Icon(
+                                        if (selected) Icons.Filled.MoreHoriz else Icons.Outlined.Settings,
+                                        contentDescription = null
+                                    )
                             }
                         },
                         label = { Text(stringResource(tab.labelRes)) }
@@ -273,9 +276,10 @@ private fun AutoUpdateDialog() {
     LaunchedEffect(Unit) {
         if (checked) return@LaunchedEffect
         checked = true
-        val current = runCatching {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull() ?: "?"
+        val current =
+            runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }.getOrNull() ?: "?"
         val r = UpdateChecker.latestRelease()
         if (r != null && UpdateChecker.isNewer(r.tag, current)) update = r
     }

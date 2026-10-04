@@ -68,6 +68,9 @@ internal class InferenceEngineImpl private constructor(
     private external fun applySampler(temp: Float, topK: Int, topP: Float): Int
 
     @FastNative
+    private external fun applyGrammar(grammar: String?): Int
+
+    @FastNative
     private external fun nativeSetLoraAdapter(path: String, scale: Float): Int
 
     @FastNative
@@ -229,6 +232,17 @@ internal class InferenceEngineImpl private constructor(
                 RuntimeException("Failed to apply sampler params: $rc")
             }
         }
+
+    override suspend fun setGrammar(grammar: String?): Unit = withContext(llamaDispatcher) {
+        val blank = grammar.isNullOrBlank()
+        check(_state.value is InferenceEngine.State.ModelReady) {
+            "Grammar requires a loaded model (${_state.value.javaClass.simpleName})"
+        }
+        // A null grammar restores plain sampling, so callers must not be able to leave the model
+        // stuck on the previous generation's constraint.
+        val rc = applyGrammar(if (blank) null else grammar)
+        if (rc != 0) RuntimeException("Failed to apply grammar: $rc")
+    }
 
     override suspend fun setLoraAdapter(path: String, scale: Float): Unit = withContext(llamaDispatcher) {
         check(_state.value is InferenceEngine.State.ModelReady) {

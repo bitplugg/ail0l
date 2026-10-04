@@ -1,0 +1,18 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 160
+
+[*.{kt,kts}]
+ktlint_code_style = android_studio
+ktlint_standard_no-wildcard-imports = enabled
+ktlint_function_naming_ignore_when_annotated_with = Composable
+# Backing-state properties are named _foo / INSTANCE by convention and ktlint 1.x
+# offers no pattern exception for this rule.
+ktlint_standard_property-naming = disabled

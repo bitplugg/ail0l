@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
 class SyncTile : TileService() {
-
     override fun onStartListening() {
         publish()
     }

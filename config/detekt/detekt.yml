@@ -1,0 +1,111 @@
+# Detekt configuration for AIIA.
+#
+# Rules are mostly inherited from the default config (buildUponDefaultConfig = true).
+# Overrides below only relax rules that do not fit this codebase: the app is a
+# Compose UI with heavy native glue, where numeric literals, long composable
+# bodies and broad `catch (e: Exception)` blocks are idiomatic rather than smelly.
+
+complexity:
+  active: true
+  LongMethod:
+    active: true
+    threshold: 80
+  LongParameterList:
+    active: true
+    functionThreshold: 8
+    constructorThreshold: 10
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 40
+    thresholdInClasses: 40
+    thresholdInInterfaces: 40
+    thresholdInObjects: 40
+    thresholdInEnums: 30
+    ignoreDeprecated: true
+    ignorePrivate: true
+  ComplexCondition:
+    active: true
+    threshold: 6
+  NestedBlockDepth:
+    active: true
+    threshold: 6
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 20
+  LabeledExpression:
+    active: true
+  LargeClass:
+    active: true
+    threshold: 900
+
+style:
+  active: true
+  MagicNumber:
+    active: false
+  MaxLineLength:
+    active: true
+    maxLineLength: 160
+    excludePackageStatements: true
+    excludeImportStatements: true
+    excludeCommentStatements: true
+  ReturnCount:
+    active: true
+    max: 6
+  ThrowsCount:
+    active: true
+    max: 6
+  UnusedPrivateMember:
+    active: true
+    allowedNames: '_|ignored|serial|unused|component'
+  UseRequire:
+    active: false
+  UseCheckOrError:
+    active: false
+  ForbiddenComment:
+    active: true
+    comments:
+      - reason: 'Unresolved TODO left in production code'
+        value: 'TODO:'
+      - reason: 'Unresolved FIXME left in production code'
+        value: 'FIXME:'
+      - reason: 'STOPSHIP left in production code'
+        value: 'STOPSHIP:'
+  WildcardImport:
+    active: true
+
+exceptions:
+  active: true
+  TooGenericExceptionCaught:
+    active: false
+  TooGenericExceptionThrown:
+    active: false
+  SwallowedException:
+    active: false
+  InstanceOfCheckForException:
+    active: false
+  NotImplementedDeclaration:
+    active: true
+
+naming:
+  active: true
+  FunctionNaming:
+    active: true
+    ignoreAnnotated: [ 'Composable' ]
+  TopLevelPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Za-z0-9]*'
+  MatchingDeclarationName:
+    active: false
+
+performance:
+  active: true
+  SpreadOperator:
+    active: false
+
+potential-bugs:
+  active: true
+  UnsafeCallOnNullableType:
+    active: false
+  CastToNullableType:
+    active: false

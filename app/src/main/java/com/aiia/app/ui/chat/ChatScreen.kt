@@ -5,12 +5,11 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.FileProvider
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -31,16 +29,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -63,11 +62,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,8 +73,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aiia.app.data.entities.MessageEntity
 import com.aiia.app.dm.Dependencies
@@ -104,16 +101,20 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     var menuOpen by remember { mutableStateOf(false) }
     var personaMenuOpen by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
-    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(viewModel::addAttachment)
-    }
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        val uri = pendingCameraUri
-        if (saved && uri != null) viewModel.addAttachment(uri)
-    }
+    val galleryLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            uri?.let(viewModel::addAttachment)
+        }
+    val cameraLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+            val uri = pendingCameraUri
+            if (saved && uri != null) viewModel.addAttachment(uri)
+        }
+
     fun openCamera() {
-        val file = java.io.File(context.cacheDir, "chat-images").apply { mkdirs() }
-            .resolve("camera-${System.currentTimeMillis()}.jpg")
+        val file =
+            java.io.File(context.cacheDir, "chat-images").apply { mkdirs() }
+                .resolve("camera-${System.currentTimeMillis()}.jpg")
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         pendingCameraUri = uri
         cameraLauncher.launch(uri)
@@ -123,7 +124,6 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
         scope.launch {
             val text = Stt.recognize(context)
             if (text != null) {
-
                 if (input.isBlank() && text.startsWithAnyCommand()) {
                     viewModel.sendVoice(text)
                 } else {
@@ -132,17 +132,44 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             }
         }
     }
-    val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) beginStt()
-    }
-
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            val text = runCatching {
-                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-            }.getOrNull()
-            viewModel.importConversation(text ?: "")
+    val micLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) beginStt()
         }
+
+    val importLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                val text =
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    }.getOrNull()
+                viewModel.importConversation(text ?: "")
+            }
+        }
+
+    val backupLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri != null) {
+                scope.launch {
+                    val json = viewModel.exportBackup()
+                    if (json.isNullOrBlank()) {
+                        viewModel.showNotice("Нет данных для экспорта.")
+                    } else {
+                        val saved =
+                            runCatching {
+                                context.contentResolver.openOutputStream(uri)
+                                    ?.bufferedWriter()
+                                    ?.use { it.write(json) }
+                            }.isSuccess
+                        viewModel.showNotice(if (saved) "Бэкап сохранён" else "Не удалось сохранить файл")
+                    }
+                }
+            }
+        }
+
+    fun exportBackup() {
+        backupLauncher.launch("aiia-backup-${System.currentTimeMillis() / 1000}.json")
     }
 
     fun exportShare() {
@@ -151,10 +178,11 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             if (text.isNullOrBlank()) {
                 viewModel.showNotice("Нет сообщений для экспорта.")
             } else {
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, text)
-                }
+                val send =
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
+                    }
                 runCatching {
                     context.startActivity(Intent.createChooser(send, "Экспорт беседы"))
                 }.onFailure { viewModel.showNotice("Нет приложения для экспорта") }
@@ -206,17 +234,34 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 DropdownMenuItem(
                     text = { Text("Экспорт беседы") },
                     leadingIcon = { Icon(Icons.Filled.IosShare, null) },
-                    onClick = { menuOpen = false; exportShare() }
+                    onClick = {
+                        menuOpen = false
+                        exportShare()
+                    }
                 )
                 DropdownMenuItem(
                     text = { Text("Импорт беседы из файла") },
                     leadingIcon = { Icon(Icons.Filled.Download, null) },
-                    onClick = { menuOpen = false; importLauncher.launch(arrayOf("text/*", "text/plain")) }
+                    onClick = {
+                        menuOpen = false
+                        importLauncher.launch(arrayOf("application/json", "text/*", "text/plain"))
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("Экспорт всех данных (JSON)") },
+                    leadingIcon = { Icon(Icons.Filled.Save, null) },
+                    onClick = {
+                        menuOpen = false
+                        exportBackup()
+                    }
                 )
                 DropdownMenuItem(
                     text = { Text("Отправить всё в сетевой канал") },
                     leadingIcon = { Icon(Icons.Filled.Sync, null) },
-                    onClick = { menuOpen = false; viewModel.outboxConversation() }
+                    onClick = {
+                        menuOpen = false
+                        viewModel.outboxConversation()
+                    }
                 )
             }
 
@@ -282,6 +327,7 @@ private fun ChatTab(
 ) {
     val messages by viewModel.messages.collectAsState()
     val streaming by viewModel.streaming.collectAsState()
+    val streamingThinking by viewModel.streamingThinking.collectAsState()
     val error by viewModel.error.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
 
@@ -323,8 +369,8 @@ private fun ChatTab(
             items(messages, key = { it.id }) { msg ->
                 MessageBubble(msg, clipboardText, viewModel::regenerate)
             }
-            if (streaming.isNotEmpty()) {
-                item { StreamingBubble(streaming) }
+            if (streaming.isNotEmpty() || streamingThinking.isNotEmpty()) {
+                item { StreamingBubble(streaming, streamingThinking) }
             }
             error?.let {
                 item {
@@ -436,6 +482,36 @@ private fun GeminiEmptyState(onSuggestion: (String) -> Unit) {
     }
 }
 
+/**
+ * Chain-of-thought, collapsed by default so it never competes with the answer. Reasoning that is
+ * still streaming stays open because the user is watching it arrive.
+ */
+@Composable
+private fun ThinkingBlock(text: String, expanded: Boolean, live: Boolean = false) {
+    // Keyed on nothing: the collapse state must survive recomposition but reset per message.
+    var open by remember { mutableStateOf(expanded) }
+    val label = if (open) "Скрыть размышления" else "Показать размышления"
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        TextButton(onClick = { open = !open }, contentPadding = PaddingValues(0.dp)) {
+            Text(
+                if (open) "▾ $label" else "▸ $label",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (open) {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
+                Text(
+                    text = text.trim() + if (live) " ▌" else "",
+                    modifier = Modifier.padding(12.dp).widthIn(max = 720.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun MessageBubble(msg: MessageEntity, clipboardText: (String) -> Unit, onRegenerate: () -> Unit) {
     val isUser = msg.role == "user"
@@ -444,9 +520,12 @@ private fun MessageBubble(msg: MessageEntity, clipboardText: (String) -> Unit, o
             Surface(
                 modifier = Modifier.animateContentSize(spring(stiffness = Spring.StiffnessLow)),
                 color = if (isUser) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                shape = if (isUser)
+                shape =
+                if (isUser) {
                     RoundedCornerShape(topStart = 24.dp, topEnd = 8.dp, bottomStart = 24.dp, bottomEnd = 24.dp)
-                else RoundedCornerShape(0.dp),
+                } else {
+                    RoundedCornerShape(0.dp)
+                }
             ) {
                 val accent = MaterialTheme.colorScheme.primary
                 Column {
@@ -461,9 +540,14 @@ private fun MessageBubble(msg: MessageEntity, clipboardText: (String) -> Unit, o
                         }
                     }
                     Text(
-                        text = if (isUser) AnnotatedString(msg.content)
-                        else Markdown.render(msg.content, accent),
-                        modifier = Modifier.padding(
+                        text =
+                        if (isUser) {
+                            AnnotatedString(msg.content)
+                        } else {
+                            Markdown.render(msg.content, accent)
+                        },
+                        modifier =
+                        Modifier.padding(
                             horizontal = if (isUser) 16.dp else 0.dp,
                             vertical = if (isUser) 10.dp else 4.dp
                         ).widthIn(max = 720.dp),
@@ -492,8 +576,11 @@ private fun String.startsWithAnyCommand(): Boolean {
 }
 
 @Composable
-private fun StreamingBubble(text: String) {
+private fun StreamingBubble(text: String, thinking: String = "") {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        if (thinking.isNotBlank()) {
+            ThinkingBlock(thinking, expanded = true, live = true)
+        }
         Surface(
             modifier = Modifier.animateContentSize(spring(stiffness = Spring.StiffnessLow)),
             color = Color.Transparent,

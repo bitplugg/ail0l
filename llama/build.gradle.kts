@@ -1,6 +1,15 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.detekt)
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    parallel = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    baseline = rootProject.file("config/detekt/baseline-llama.xml")
+    ignoreFailures = providers.gradleProperty("detekt.ignoreFailures").orNull == "true"
 }
 
 android {

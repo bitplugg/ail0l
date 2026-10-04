@@ -10,12 +10,7 @@ import com.aiia.app.R
 import com.aiia.app.ui.MainActivity
 
 class QuickCommandWidget : AppWidgetProvider() {
-
-    override fun onUpdate(
-        context: Context,
-        appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray
-    ) {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         for (id in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_quick_command)
             views.setOnClickPendingIntent(R.id.btn_memory, pending(context, CMD_MEMORY))
@@ -27,12 +22,13 @@ class QuickCommandWidget : AppWidgetProvider() {
     }
 
     private fun pending(context: Context, command: String): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_COMMAND, command)
-        }
+        val intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_COMMAND, command)
+            }
         return PendingIntent.getActivity(
             context,
             command.hashCode(),

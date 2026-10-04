@@ -5,6 +5,7 @@ import com.aiia.app.ai.Engine
 import com.aiia.app.data.AppDatabase
 import com.aiia.app.data.SettingsRepository
 import com.aiia.app.util.Notifications
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.io.File
 
 data class ProvisionState(
     val entry: CatalogEntry? = null,
@@ -26,7 +26,6 @@ class ProvisionManager(
     private val db: AppDatabase,
     private val settings: SettingsRepository
 ) {
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _state = MutableStateFlow(ProvisionState())
@@ -38,10 +37,9 @@ class ProvisionManager(
 
     fun localFile(entry: CatalogEntry): File = HfDownloader(context, db, "").localPath(entry)
 
-    fun deviceSummary(): String =
-        "ABI ${DeviceProfile.abi()} · ${DeviceProfile.cores()} ядер(а) · " +
-            "RAM ${DeviceProfile.ramBytes(context) / (1024 * 1024 * 1024)} ГБ · " +
-            "Android ${DeviceProfile.androidVersion()}"
+    fun deviceSummary(): String = "ABI ${DeviceProfile.abi()} · ${DeviceProfile.cores()} ядер(а) · " +
+        "RAM ${DeviceProfile.ramBytes(context) / (1024 * 1024 * 1024)} ГБ · " +
+        "Android ${DeviceProfile.androidVersion()}"
 
     fun provisionOrEnsure() {
         scope.launch {
@@ -68,11 +66,12 @@ class ProvisionManager(
                 val token = settings.settings.first().hfToken
                 val downloader = HfDownloader(context, db, token)
                 downloader.download(entry).collect { p ->
-                    _state.value = ProvisionState(
-                        entry = entry,
-                        progress = p,
-                        status = if (p.done) "done" else "downloading"
-                    )
+                    _state.value =
+                        ProvisionState(
+                            entry = entry,
+                            progress = p,
+                            status = if (p.done) "done" else "downloading"
+                        )
                     Notifications.notifyModelProgress(context, p.downloadedBytes, p.totalBytes)
                 }
                 settings.setEngine(Engine.LOCAL)

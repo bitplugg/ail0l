@@ -69,25 +69,22 @@ object Notifications {
         }
     }
 
-    fun notifyModelProgress(
-        context: Context,
-        downloadedBytes: Long,
-        totalBytes: Long
-    ) {
+    fun notifyModelProgress(context: Context, downloadedBytes: Long, totalBytes: Long) {
         if (totalBytes <= 0) return
         val pct = (downloadedBytes * 100 / totalBytes).toInt().coerceIn(0, 100)
         val mbytes = downloadedBytes / (1024.0 * 1024.0)
         val totalMb = totalBytes / (1024.0 * 1024.0)
 
-        val notification = NotificationCompat.Builder(context, MODEL_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Скачивание модели AIIA")
-            .setContentText("%d%% · %.0f из %.0f МБ".format(pct, mbytes, totalMb))
-            .setProgress(100, pct, false)
-            .setOnlyAlertOnce(true)
-            .setOngoing(pct < 100)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        val notification =
+            NotificationCompat.Builder(context, MODEL_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("Скачивание модели AIIA")
+                .setContentText("%d%% · %.0f из %.0f МБ".format(pct, mbytes, totalMb))
+                .setProgress(100, pct, false)
+                .setOnlyAlertOnce(true)
+                .setOngoing(pct < 100)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
 
         context.getSystemService(NotificationManager::class.java)?.notify(MODEL_NOTIF_ID, notification)
     }
@@ -104,23 +101,28 @@ object Notifications {
             return false
         }
 
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val pi = PendingIntent.getActivity(
-            context, 0, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+        val pi =
+            PendingIntent.getActivity(
+                context,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(sender)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setContentIntent(pi)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .build()
+        val notification =
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle(sender)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .build()
 
         context.getSystemService(NotificationManager::class.java)?.notify(NOTIF_ID, notification)
         return true

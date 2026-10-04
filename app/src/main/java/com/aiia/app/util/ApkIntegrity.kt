@@ -29,20 +29,16 @@ object ApkIntegrityVerifier {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    fun verify(
-        context: Context,
-        file: File,
-        expectedPackage: String? = context.packageName,
-        expectedSha256: String? = null
-    ): ApkIntegrity {
+    fun verify(context: Context, file: File, expectedPackage: String? = context.packageName, expectedSha256: String? = null): ApkIntegrity {
         require(file.isFile && file.length() > 0) { "APK file is missing" }
         expectedSha256?.takeIf { it.isNotBlank() }?.let {
             require(sha256(file).equals(it, ignoreCase = true)) { "APK SHA-256 mismatch" }
         }
-        val info = context.packageManager.getPackageArchiveInfo(
-            file.absolutePath,
-            PackageManager.GET_SIGNING_CERTIFICATES
-        ) ?: error("Android cannot parse this APK")
+        val info =
+            context.packageManager.getPackageArchiveInfo(
+                file.absolutePath,
+                PackageManager.GET_SIGNING_CERTIFICATES
+            ) ?: error("Android cannot parse this APK")
         if (expectedPackage != null) {
             require(info.packageName == expectedPackage) {
                 "Unexpected package: ${info.packageName}"
@@ -50,19 +46,20 @@ object ApkIntegrityVerifier {
         }
         val signing = signingDigests(info)
         require(signing.isNotEmpty()) { "APK has no signing certificate" }
-        val installed = expectedPackage?.let { packageName ->
-            runCatching {
-                if (Build.VERSION.SDK_INT >= 33) {
-                    context.packageManager.getPackageInfo(
-                        packageName,
-                        PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong())
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-                }
-            }.getOrNull()
-        }
+        val installed =
+            expectedPackage?.let { packageName ->
+                runCatching {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        context.packageManager.getPackageInfo(
+                            packageName,
+                            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong())
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                    }
+                }.getOrNull()
+            }
         if (installed != null) {
             val installedSigners = signingDigests(installed)
             require(installedSigners.isEmpty() || installedSigners == signing) {
@@ -79,12 +76,13 @@ object ApkIntegrityVerifier {
     }
 
     private fun signingDigests(info: PackageInfo): Set<String> {
-        val signatures = if (Build.VERSION.SDK_INT >= 28) {
-            info.signingInfo?.apkContentsSigners.orEmpty()
-        } else {
-            @Suppress("DEPRECATION")
-            info.signatures.orEmpty()
-        }
+        val signatures =
+            if (Build.VERSION.SDK_INT >= 28) {
+                info.signingInfo?.apkContentsSigners.orEmpty()
+            } else {
+                @Suppress("DEPRECATION")
+                info.signatures.orEmpty()
+            }
         return signatures.map { signature ->
             MessageDigest.getInstance("SHA-256")
                 .digest(signature.toByteArray())

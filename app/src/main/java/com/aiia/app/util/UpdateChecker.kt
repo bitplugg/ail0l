@@ -5,6 +5,8 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import java.io.File
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -14,8 +16,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
-import java.util.concurrent.TimeUnit
 
 data class ReleaseInfo(
     val tag: String,
@@ -28,38 +28,49 @@ data class ReleaseInfo(
 object UpdateChecker {
     private const val REPO = "https://api.github.com/repos/bitplugg/ail0l"
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .build()
+    private val client =
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
 
     suspend fun latestRelease(): ReleaseInfo? = withContext(Dispatchers.IO) {
         runCatching {
-            val req = Request.Builder()
-                .url("$REPO/releases/latest")
-                .header("User-Agent", "AIIA/1.0")
-                .get()
-                .build()
+            val req =
+                Request.Builder()
+                    .url("$REPO/releases/latest")
+                    .header("User-Agent", "AIIA/1.0")
+                    .get()
+                    .build()
             client.newCall(req).execute().use { r ->
                 if (!r.isSuccessful) return@runCatching null
                 val body = r.body?.string() ?: return@runCatching null
                 val root = Json.parseToJsonElement(body).jsonObject
                 val assets = (root["assets"]?.jsonArray ?: emptyList())
-                val apkAsset = assets.firstOrNull {
-                    it.jsonObject["name"]?.jsonPrimitive?.contentOrNull?.endsWith(".apk") == true
-                }?.jsonObject
+                val apkAsset =
+                    assets.firstOrNull {
+                        it.jsonObject["name"]?.jsonPrimitive?.contentOrNull?.endsWith(".apk") == true
+                    }?.jsonObject
                 val apkUrl = apkAsset?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
-                val shaUrl = assets.firstOrNull {
-                    it.jsonObject["name"]?.jsonPrimitive?.contentOrNull ==
-                        "${apkAsset?.get("name")?.jsonPrimitive?.contentOrNull}.sha256"
-                }?.jsonObject?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
-                val apkSha256 = shaUrl?.let { hashUrl ->
-                    runCatching {
-                        client.newCall(Request.Builder().url(hashUrl).get().build()).execute().use { hashResponse ->
-                            if (!hashResponse.isSuccessful) null else hashResponse.body?.string()?.trim()?.split(Regex("\\s+"))?.firstOrNull()
-                        }
-                    }.getOrNull()
-                }
+                val shaUrl =
+                    assets.firstOrNull {
+                        it.jsonObject["name"]?.jsonPrimitive?.contentOrNull ==
+                            "${apkAsset?.get("name")?.jsonPrimitive?.contentOrNull}.sha256"
+                    }?.jsonObject?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
+                val apkSha256 =
+                    shaUrl?.let { hashUrl ->
+                        runCatching {
+                            client.newCall(Request.Builder().url(hashUrl).get().build()).execute().use { hashResponse ->
+                                if (!hashResponse.isSuccessful) {
+                                    null
+                                } else {
+                                    hashResponse.body?.string()?.trim()?.split(
+                                        Regex("\\s+")
+                                    )?.firstOrNull()
+                                }
+                            }
+                        }.getOrNull()
+                    }
                 ReleaseInfo(
                     tag = root["tag_name"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                     name = root["name"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { root["tag_name"]?.jsonPrimitive?.contentOrNull.orEmpty() },
@@ -71,18 +82,7 @@ object UpdateChecker {
         }.getOrNull()
     }
 
-    fun isNewer(latestTag: String, currentVersion: String): Boolean {
-        fun nums(s: String): List<Int> =
-            s.trim().trimStart('v').split('.', '-', '_').mapNotNull { it.toIntOrNull() }
-        val a = nums(latestTag)
-        val b = nums(currentVersion)
-        for (i in 0 until maxOf(a.size, b.size)) {
-            val x = a.getOrElse(i) { 0 }
-            val y = b.getOrElse(i) { 0 }
-            if (x != y) return x > y
-        }
-        return false
-    }
+    fun isNewer(latestTag: String, currentVersion: String): Boolean = VersionCompare.isNewer(latestTag, currentVersion)
 
     suspend fun downloadApk(url: String, file: File, expectedSha256: String? = null): Boolean = withContext(Dispatchers.IO) {
         runCatching {
@@ -101,33 +101,33 @@ object UpdateChecker {
         }.getOrDefault(false)
     }
 
-    suspend fun downloadApkToDownloads(
-        context: Context,
-        url: String,
-        tag: String,
-        expectedSha256: String? = null
-    ): Uri? = withContext(Dispatchers.IO) {
+    suspend fun downloadApkToDownloads(context: Context, url: String, tag: String, expectedSha256: String? = null): Uri? = withContext(Dispatchers.IO) {
         runCatching {
             val temp = File(context.cacheDir, "update/aiia-${tag.trimStart('v')}.apk")
             if (!downloadApk(url, temp, expectedSha256)) return@runCatching null
             val name = "aiia-${tag.trimStart('v')}.apk"
-            val values = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, name)
-                put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            }
+            val values =
+                ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, name)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
             val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: return@runCatching null
-            val copied = resolver.openOutputStream(uri)?.use { out ->
-                temp.inputStream().use { it.copyTo(out, 1 shl 20) }
-                true
-            } ?: false
+            val uri =
+                resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: return@runCatching null
+            val copied =
+                resolver.openOutputStream(uri)?.use { out ->
+                    temp.inputStream().use { it.copyTo(out, 1 shl 20) }
+                    true
+                } ?: false
             temp.delete()
             if (!copied) {
                 resolver.delete(uri, null, null)
                 null
-            } else uri
+            } else {
+                uri
+            }
         }.getOrNull()
     }
 }

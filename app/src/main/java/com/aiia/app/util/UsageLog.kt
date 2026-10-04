@@ -7,7 +7,6 @@ import java.util.Locale
 import java.util.TimeZone
 
 object UsageLog {
-
     private const val PREFS = "usage"
     private const val KEY_COUNT = "count"
     private const val KEY_TOKENS = "tokens"
@@ -50,14 +49,16 @@ object UsageLog {
         val cutoffKey = keyFor(cutoff)
         val editor = p.edit()
         for (key in p.all.keys) {
-            if (key.length == 10 && key < cutoffKey) editor.remove(key).let { }
-            else if (key.contains(".") && key.substring(0, 10) < cutoffKey) editor.remove(key)
+            if (key.length == 10 && key < cutoffKey) {
+                editor.remove(key).let { }
+            } else if (key.contains(".") && key.substring(0, 10) < cutoffKey) {
+                editor.remove(key)
+            }
         }
         editor.apply()
     }
 
-    private fun keyFor(at: Long): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-            timeZone = TimeZone.getDefault()
-        }.format(Date(at))
+    private fun keyFor(at: Long): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getDefault()
+    }.format(Date(at))
 }

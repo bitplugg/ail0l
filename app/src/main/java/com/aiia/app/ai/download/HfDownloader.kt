@@ -4,15 +4,15 @@ import android.content.Context
 import com.aiia.app.data.AppDatabase
 import com.aiia.app.data.entities.ModelEntity
 import com.aiia.app.util.Http
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.Request
 import okhttp3.Response
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 
 data class DownloadProgress(
     val downloadedBytes: Long,
@@ -26,14 +26,12 @@ class HfDownloader(
     private val db: AppDatabase,
     private val hfToken: String
 ) {
-
     fun modelsDir(): File {
         val base = context.getExternalFilesDir(null) ?: context.filesDir
         return File(base, "models").also { it.mkdirs() }
     }
 
-    fun localPath(entry: CatalogEntry): File =
-        File(modelsDir(), "${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf")
+    fun localPath(entry: CatalogEntry): File = File(modelsDir(), "${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf")
 
     fun isInstalled(entry: CatalogEntry): Boolean = localPath(entry).isFile
 
@@ -60,9 +58,10 @@ class HfDownloader(
             response.close()
             throw IOException("HTTP ${response.code}: ${body.take(300)}")
         }
-        val total = response.header("Content-Range")?.substringAfter('/')?.toLongOrNull()
-            ?: response.header("Content-Length")?.toLongOrNull()?.plus(existing)
-            ?: entry.sizeBytes
+        val total =
+            response.header("Content-Range")?.substringAfter('/')?.toLongOrNull()
+                ?: response.header("Content-Length")?.toLongOrNull()?.plus(existing)
+                ?: entry.sizeBytes
         var downloaded = existing
         response.use { resp ->
             val body = resp.body ?: throw IOException("Пустой ответ сервера")
@@ -90,16 +89,18 @@ class HfDownloader(
         if (total > 0 && downloaded < total) throw IOException("Загрузка оборвалась: $downloaded из $total байт")
         if (target.exists()) target.delete()
         if (!tmp.renameTo(target)) throw IOException("Не удалось сохранить файл модели")
-        db.dao().upsertModel(ModelEntity(
-            repo = entry.repo,
-            filename = entry.filename,
-            family = entry.family,
-            paramsLabel = entry.paramsLabel,
-            quant = entry.quant,
-            sizeBytes = target.length(),
-            modelFile = target.absolutePath,
-            installed = true
-        ))
+        db.dao().upsertModel(
+            ModelEntity(
+                repo = entry.repo,
+                filename = entry.filename,
+                family = entry.family,
+                paramsLabel = entry.paramsLabel,
+                quant = entry.quant,
+                sizeBytes = target.length(),
+                modelFile = target.absolutePath,
+                installed = true
+            )
+        )
         emit(DownloadProgress(downloaded, total, 0, done = true))
     }.flowOn(Dispatchers.IO)
 

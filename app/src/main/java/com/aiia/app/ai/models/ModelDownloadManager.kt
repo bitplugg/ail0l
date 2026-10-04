@@ -2,15 +2,15 @@ package com.aiia.app.ai.models
 
 import android.content.Context
 import com.aiia.app.util.Http
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.util.concurrent.atomic.AtomicBoolean
 
 data class ModelDownloadProgress(
     val artifact: ModelArtifact,
@@ -20,6 +20,7 @@ data class ModelDownloadProgress(
     val state: State = State.DOWNLOADING
 ) {
     enum class State { DOWNLOADING, PAUSED, COMPLETED, FAILED }
+
     val fraction: Float
         get() = if (totalBytes <= 0) 0f else (downloadedBytes.toDouble() / totalBytes).toFloat().coerceIn(0f, 1f)
 }
@@ -32,7 +33,9 @@ class ModelDownloadManager(
     private val root = File(context.getExternalFilesDir(null) ?: context.filesDir, "models")
     private val cancelled = AtomicBoolean(false)
 
-    init { root.mkdirs() }
+    init {
+        root.mkdirs()
+    }
 
     fun destination(artifact: ModelArtifact): File = File(
         root,
@@ -41,7 +44,9 @@ class ModelDownloadManager(
 
     fun isPaused(artifact: ModelArtifact): Boolean = File(destination(artifact).absolutePath + ".part").isFile
 
-    fun cancel() { cancelled.set(true) }
+    fun cancel() {
+        cancelled.set(true)
+    }
 
     fun download(artifact: ModelArtifact): Flow<ModelDownloadProgress> = flow {
         cancelled.set(false)
@@ -54,10 +59,11 @@ class ModelDownloadManager(
             existing = 0
         }
 
-        val builder = Request.Builder()
-            .url(artifact.downloadUrl)
-            .header("Accept-Encoding", "identity")
-            .header("User-Agent", "AIIA/1.0")
+        val builder =
+            Request.Builder()
+                .url(artifact.downloadUrl)
+                .header("Accept-Encoding", "identity")
+                .header("User-Agent", "AIIA/1.0")
         if (token.isNotBlank()) builder.header("Authorization", "Bearer $token")
         if (existing > 0) builder.header("Range", "bytes=$existing-")
         val response = Http.client.newCall(builder.build()).execute()
@@ -113,7 +119,13 @@ class ModelDownloadManager(
                     throw IOException("SHA-256 не совпадает для ${artifact.filename}")
                 }
             }
-            val done = ModelDownloadProgress(artifact, target.length(), total.coerceAtLeast(target.length()), state = ModelDownloadProgress.State.COMPLETED)
+            val done =
+                ModelDownloadProgress(
+                    artifact,
+                    target.length(),
+                    total.coerceAtLeast(target.length()),
+                    state = ModelDownloadProgress.State.COMPLETED
+                )
             onProgress(done)
             emit(done)
         }

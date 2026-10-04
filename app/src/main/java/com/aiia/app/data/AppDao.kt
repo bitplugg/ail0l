@@ -7,19 +7,18 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.aiia.app.data.entities.ConversationEntity
+import com.aiia.app.data.entities.FactEmbeddingEntity
 import com.aiia.app.data.entities.FactEntity
 import com.aiia.app.data.entities.InboxEntity
 import com.aiia.app.data.entities.MessageEntity
 import com.aiia.app.data.entities.ModelEntity
 import com.aiia.app.data.entities.OutboxEntity
-import com.aiia.app.data.entities.ReminderEntity
 import com.aiia.app.data.entities.PersonaEntity
-import com.aiia.app.data.entities.FactEmbeddingEntity
+import com.aiia.app.data.entities.ReminderEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AppDao {
-
     @Insert
     suspend fun insertConversation(c: ConversationEntity): Long
 
@@ -28,6 +27,9 @@ interface AppDao {
 
     @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
     fun observeConversations(): Flow<List<ConversationEntity>>
+
+    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
+    suspend fun allConversations(): List<ConversationEntity>
 
     @Query("SELECT * FROM conversations WHERE id = :id")
     fun observeConversation(id: Long): Flow<ConversationEntity?>
@@ -67,6 +69,10 @@ interface AppDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertFact(f: FactEntity): Long
+
+    /** Returns the new row id, or -1 when the same fact is already stored. */
+    @Query("INSERT OR IGNORE INTO facts (fact, category, favorite, createdAt) VALUES (:fact, :category, :favorite, :createdAt)")
+    suspend fun insertFactIfMissing(fact: String, category: String, favorite: Boolean, createdAt: Long): Long
 
     @Query("SELECT * FROM facts ORDER BY favorite DESC, createdAt DESC")
     fun observeFacts(): Flow<List<FactEntity>>

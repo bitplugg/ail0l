@@ -2,26 +2,27 @@ package com.aiia.app.plugins.engine
 
 import android.content.Context
 import android.os.Environment
-import dalvik.system.DexClassLoader
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import java.io.File
 import com.aiia.app.plugins.sandbox.PluginSandboxClient
 import com.aiia.app.util.ApkIntegrityVerifier
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.util.zip.ZipInputStream
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 sealed interface InstallState {
     data object Idle : InstallState
+
     data class AwaitingPermission(val packageFile: File, val manifest: PluginManifest) : InstallState
+
     data class Installed(val plugin: LoadedPlugin) : InstallState
+
     data class Failed(val message: String) : InstallState
 }
 
@@ -85,8 +86,9 @@ class PluginManager(private val context: Context) {
     }
 
     suspend fun confirmInstall(): InstallState = withContext(Dispatchers.IO) {
-        val pending = _state.value as? InstallState.AwaitingPermission
-            ?: return@withContext InstallState.Idle
+        val pending =
+            _state.value as? InstallState.AwaitingPermission
+                ?: return@withContext InstallState.Idle
         runCatching {
             val source = pending.packageFile
             val dex = if (source.isDirectory) File(source, "plugin.dex") else source
@@ -108,11 +110,12 @@ class PluginManager(private val context: Context) {
 
     suspend fun hotReload(): List<LoadedPlugin> = withContext(Dispatchers.IO) {
         val extensions = setOf("dex", "jar", "aiip")
-        val files = buildList {
-            addAll(developmentDirectory().listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
-            addAll(context.getExternalFilesDir(null)?.listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
-            addAll(File(context.filesDir, "plugin-store").listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
-        }.distinctBy { it.absolutePath }
+        val files =
+            buildList {
+                addAll(developmentDirectory().listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
+                addAll(context.getExternalFilesDir(null)?.listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
+                addAll(File(context.filesDir, "plugin-store").listFiles()?.filter { it.extension.lowercase() in extensions }.orEmpty())
+            }.distinctBy { it.absolutePath }
         files.forEach { file ->
             val result = install(file)
             if (result is InstallState.AwaitingPermission && isApproved(result.manifest.id)) {
@@ -131,43 +134,32 @@ class PluginManager(private val context: Context) {
     }
 
     private fun extractPackage(source: File): File {
-        val target = File(context.cacheDir, "aiip/${source.nameWithoutExtension}").also { it.deleteRecursively(); it.mkdirs() }
-        var total = 0L
-        ZipInputStream(source.inputStream().buffered()).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                val destination = File(target, entry.name)
-                require(destination.canonicalPath.startsWith(target.canonicalPath + File.separator)) { "Unsafe zip path" }
-                if (entry.isDirectory) {
-                    destination.mkdirs()
-                } else {
-                    destination.parentFile?.mkdirs()
-                    destination.outputStream().use { out -> zip.copyTo(out) }
-                    total += destination.length()
-                    require(total <= MAX_PACKAGE_BYTES) { "Package is too large" }
-                }
-                zip.closeEntry()
-            }
-        }
+        val target = File(context.cacheDir, "aiip/${source.nameWithoutExtension}")
+        PluginPackageInspector.extract(source, target)
         return target
     }
 
     private fun isApproved(id: String): Boolean = approvalPreferences.getBoolean(id, false)
 
     private fun readManifest(source: File): PluginManifest {
-        val manifestFile = if (source.isDirectory) File(source, "manifest.json") else File(source.parentFile, "${source.nameWithoutExtension}.manifest.json")
+        val manifestFile =
+            if (source.isDirectory) {
+                File(
+                    source,
+                    "manifest.json"
+                )
+            } else {
+                File(source.parentFile, "${source.nameWithoutExtension}.manifest.json")
+            }
         return if (manifestFile.isFile) {
-            val migrated = PluginManifestMigrator.migrate(
-                json.parseToJsonElement(manifestFile.readText()).jsonObject
-            )
+            val migrated =
+                PluginManifestMigrator.migrate(
+                    json.parseToJsonElement(manifestFile.readText()).jsonObject
+                )
             json.decodeFromJsonElement(PluginManifest.serializer(), migrated)
         } else {
             PluginManifest(source.nameWithoutExtension, source.nameWithoutExtension, "0", "", emptyList())
         }
-    }
-
-    companion object {
-        private const val MAX_PACKAGE_BYTES = 256L * 1024 * 1024
     }
 }
 
@@ -178,7 +170,5 @@ private class SandboxedPlugin(
 ) : AiiaPlugin {
     override fun tools(): List<PluginTool> = cachedTools
 
-    override suspend fun call(name: String, arguments: kotlinx.serialization.json.JsonObject): String =
-        client.call(manifest.id, name, arguments)
+    override suspend fun call(name: String, arguments: kotlinx.serialization.json.JsonObject): String = client.call(manifest.id, name, arguments)
 }
-

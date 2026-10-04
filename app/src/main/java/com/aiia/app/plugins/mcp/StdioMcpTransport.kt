@@ -1,5 +1,9 @@
 package com.aiia.app.plugins.mcp
 
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.PrintWriter
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
@@ -10,10 +14,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.PrintWriter
-import java.util.concurrent.atomic.AtomicLong
 
 class StdioMcpTransport(
     private val serverName: String,
@@ -31,11 +31,23 @@ class StdioMcpTransport(
     }
 
     override suspend fun initialize(): JsonObject = withContext(Dispatchers.IO) {
-        rpcObject(McpJson.request(ids.getAndIncrement(), "initialize", buildJsonObject {
-            put("protocolVersion", JsonPrimitive("2024-11-05"))
-            put("capabilities", buildJsonObject {})
-            put("clientInfo", buildJsonObject { put("name", JsonPrimitive("AIIA")); put("version", JsonPrimitive("1.0")) })
-        }))
+        rpcObject(
+            McpJson.request(
+                ids.getAndIncrement(),
+                "initialize",
+                buildJsonObject {
+                    put("protocolVersion", JsonPrimitive("2024-11-05"))
+                    put("capabilities", buildJsonObject {})
+                    put(
+                        "clientInfo",
+                        buildJsonObject {
+                            put("name", JsonPrimitive("AIIA"))
+                            put("version", JsonPrimitive("1.0"))
+                        }
+                    )
+                }
+            )
+        )
     }
 
     override suspend fun listTools(): List<McpTool> = withContext(Dispatchers.IO) {
@@ -53,10 +65,16 @@ class StdioMcpTransport(
     }
 
     override suspend fun callTool(name: String, arguments: JsonObject): JsonElement = withContext(Dispatchers.IO) {
-        rpc(McpJson.request(ids.getAndIncrement(), "tools/call", buildJsonObject {
-            put("name", JsonPrimitive(name))
-            put("arguments", arguments)
-        }))
+        rpc(
+            McpJson.request(
+                ids.getAndIncrement(),
+                "tools/call",
+                buildJsonObject {
+                    put("name", JsonPrimitive(name))
+                    put("arguments", arguments)
+                }
+            )
+        )
     }
 
     private fun rpcObject(request: JsonObject): JsonObject = rpc(request).jsonObject

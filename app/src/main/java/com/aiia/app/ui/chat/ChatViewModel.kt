@@ -4,10 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aiia.app.agent.Agent
-import com.aiia.app.ai.ImageAttachment
 import com.aiia.app.agent.tools.ToolCall
-import com.aiia.app.agent.tools.ToolResult
-import com.aiia.app.ui.chat.ImageStorage
+import com.aiia.app.ai.ImageAttachment
+import com.aiia.app.data.BackupCodec
+import com.aiia.app.data.BackupConversation
+import com.aiia.app.data.BackupDocument
+import com.aiia.app.data.BackupFact
+import com.aiia.app.data.BackupMessage
+import com.aiia.app.data.LegacyTranscript
 import com.aiia.app.data.entities.ConversationEntity
 import com.aiia.app.data.entities.FactEntity
 import com.aiia.app.data.entities.MessageEntity
@@ -21,15 +25,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
-
     private val dao = Dependencies.db.dao()
     private val agent: Agent = Dependencies.agent
     private val personaRepository = Dependencies.personas
@@ -38,6 +41,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val _input = MutableStateFlow("")
     private val _sending = MutableStateFlow(false)
     private val _streaming = MutableStateFlow("")
+
+    private val _streamingThinking = MutableStateFlow("")
     private val _error = MutableStateFlow<String?>(null)
     private val _notice = MutableStateFlow<String?>(null)
     private val _quickMode = MutableStateFlow(false)
@@ -64,6 +69,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val input: StateFlow<String> = _input.asStateFlow()
     val sending: StateFlow<Boolean> = _sending.asStateFlow()
     val streaming: StateFlow<String> = _streaming.asStateFlow()
+
+    /** Live chain-of-thought, rendered separately from the answer. */
+    val streamingThinking: StateFlow<String> = _streamingThinking.asStateFlow()
     val quickMode: StateFlow<Boolean> = _quickMode.asStateFlow()
     val error: StateFlow<String?> = _error.asStateFlow()
     val notice: StateFlow<String?> = _notice.asStateFlow()
@@ -77,8 +85,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         dao.observeFacts()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val personas = personaRepository.personas
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val personas =
+        personaRepository.personas
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         viewModelScope.launch {
@@ -168,8 +177,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             if (id == 0L) return@launch
             val recent = withContext(Dispatchers.IO) { dao.recentMessages(id, 1) }
             val last = recent.firstOrNull() ?: return@launch
-            val lastUser = withContext(Dispatchers.IO) { dao.recentMessages(id, 20) }
-                .lastOrNull { it.role == "user" } ?: return@launch
+            val lastUser =
+                withContext(Dispatchers.IO) { dao.recentMessages(id, 20) }
+                    .lastOrNull { it.role == "user" } ?: return@launch
             withContext(Dispatchers.IO) {
                 dao.deleteLastAssistant(id)
                 dao.insertMessage(
@@ -197,12 +207,15 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 agent.send(id, text, predictLength, images).collect { event ->
                     when (event) {
                         is Agent.Event.Token -> _streaming.value += event.text
+                        is Agent.Event.Thinking -> _streamingThinking.value += event.text
                         is Agent.Event.Done -> {
                             _streaming.value = ""
+                            _streamingThinking.value = ""
                             speakIfEnabled(event.full)
                         }
                         is Agent.Event.Failure -> {
                             _streaming.value = ""
+                            _streamingThinking.value = ""
                             _error.value = event.message
                         }
                         is Agent.Event.ToolRequired -> {
@@ -219,13 +232,14 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshThoughts() {
         viewModelScope.launch {
-            val (pending, outbox, inbox) = withContext(Dispatchers.IO) {
-                Triple(
-                    dao.countPendingOutbox(),
-                    dao.countOutbox(),
-                    dao.countInbox()
-                )
-            }
+            val (pending, outbox, inbox) =
+                withContext(Dispatchers.IO) {
+                    Triple(
+                        dao.countPendingOutbox(),
+                        dao.countOutbox(),
+                        dao.countInbox()
+                    )
+                }
             _counts.value = Triple(outbox, pending, inbox)
             _thoughts.value = ThoughtLog.entries()
         }
@@ -276,37 +290,109 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         }.trimEnd('\n')
     }
 
+    /** Exports every conversation plus the memory store as a versioned JSON document. */
+    suspend fun exportBackup(): String? = withContext(Dispatchers.IO) {
+        val conversations = dao.allConversations().map { conversation ->
+            BackupConversation(
+                title = conversation.title,
+                pinned = conversation.pinned,
+                createdAt = conversation.createdAt,
+                messages = dao.allMessages(conversation.id).map {
+                    BackupMessage(it.role, it.content, it.createdAt, it.reasoning)
+                }
+            )
+        }
+        val facts = dao.topFacts(2000).map {
+            BackupFact(it.fact, it.category, it.favorite, it.createdAt)
+        }
+        val document = BackupDocument(
+            exportedAt = System.currentTimeMillis(),
+            conversations = conversations,
+            facts = facts
+        )
+        if (BackupCodec.isEmpty(document)) null else BackupCodec.encode(document)
+    }
+
+    /** Accepts both the JSON backup format and the plain transcript produced by older builds. */
     fun importConversation(text: String) {
         viewModelScope.launch {
-            val lines = text.replace("\r", "").split('\n')
-            val parsed = mutableListOf<Pair<String, String>>()
-            var cur: Pair<String, String>? = null
-            for (line in lines) {
-                val match = IMPORT_PATTERN.find(line.trim())
-                if (match != null) {
-                    cur?.let { if (it.second.isNotBlank() || parsed.isEmpty()) parsed += it }
-                    val role = if (match.groupValues[1].lowercase().contains("user")) "user" else "assistant"
-                    cur = role to match.groupValues[2].trim()
-                } else {
-                    cur = cur?.let { it.first to (it.second + "\n" + line.trim()) }
-                }
-            }
-            cur?.let { if (it.second.isNotBlank()) parsed += it }
-            val relevant = parsed.filter { it.second.isNotBlank() }.take(200)
-            if (relevant.isEmpty()) {
-                _notice.value = "Не удалось разобрать импортируемый текст."
+            val document = BackupCodec.decode(text)
+            if (document != null) {
+                importDocument(document)
                 return@launch
             }
-            val id = withContext(Dispatchers.IO) {
-                val cid = dao.insertConversation(ConversationEntity(title = relevant.first().second.take(30)))
-                relevant.forEach { (role, content) ->
-                    dao.insertMessage(MessageEntity(conversationId = cid, role = role, content = content))
-                }
-                cid
+            val messages = LegacyTranscript.parse(text)
+            if (messages.isEmpty()) {
+                _notice.value = "Не удалось разобрать импортируемый файл."
+                return@launch
             }
-            _convId.value = id
-            _notice.value = "Импортировано сообщений: ${relevant.size}"
+            val imported = restore(
+                title = LegacyTranscript.title(text),
+                messages = messages,
+                conversation = BackupConversation(title = LegacyTranscript.title(text))
+            )
+            if (imported.first == 0L) {
+                _notice.value = "Не удалось разобрать импортируемый файл."
+                return@launch
+            }
+            _convId.value = imported.first
+            _notice.value = "Импортировано сообщений: ${imported.second}"
         }
+    }
+
+    private suspend fun importDocument(document: BackupDocument) {
+        var messages = 0
+        var restoredFacts = 0
+        document.conversations.forEach { conversation ->
+            val result = restore(conversation.title, conversation.messages, conversation)
+            if (result.first != 0L) messages += result.second
+        }
+        withContext(Dispatchers.IO) {
+            for (fact in document.facts) {
+                if (fact.fact.isNotBlank()) {
+                    val createdAt = if (fact.createdAt > 0) fact.createdAt else System.currentTimeMillis()
+                    if (dao.insertFactIfMissing(fact.fact, fact.category, fact.favorite, createdAt) > 0L) {
+                        restoredFacts++
+                    }
+                }
+            }
+        }
+        if (messages == 0 && restoredFacts == 0) {
+            _notice.value = "В файле нет данных для импорта."
+            return
+        }
+        _notice.value = buildString {
+            append("Импортировано диалогов: ${document.conversations.size}, сообщений: $messages")
+            if (restoredFacts > 0) append(", фактов: $restoredFacts")
+        }
+    }
+
+    /** Returns the new conversation id and the number of stored messages. */
+    private suspend fun restore(title: String, messages: List<BackupMessage>, conversation: BackupConversation): Pair<Long, Int> = withContext(Dispatchers.IO) {
+        val usable = messages.filter { it.content.isNotBlank() }.take(MAX_IMPORT_MESSAGES)
+        val id = if (usable.isEmpty()) {
+            0L
+        } else {
+            dao.insertConversation(
+                ConversationEntity(
+                    title = title.ifBlank { "Импортированный диалог" }.take(80),
+                    pinned = conversation.pinned,
+                    createdAt = if (conversation.createdAt > 0) conversation.createdAt else System.currentTimeMillis()
+                )
+            )
+        }
+        usable.forEach {
+            dao.insertMessage(
+                MessageEntity(
+                    conversationId = id,
+                    role = it.role,
+                    content = it.content,
+                    createdAt = if (it.createdAt > 0) it.createdAt else System.currentTimeMillis(),
+                    reasoning = it.reasoning
+                )
+            )
+        }
+        id to usable.size
     }
 
     fun outboxConversation() {
@@ -335,15 +421,16 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun ensureConversation(): Long {
         if (_convId.value != 0L) return _convId.value
-        val id = withContext(Dispatchers.IO) {
-            dao.insertConversation(ConversationEntity())
-        }
+        val id =
+            withContext(Dispatchers.IO) {
+                dao.insertConversation(ConversationEntity())
+            }
         _convId.value = id
         return id
     }
 
     companion object {
-        private val IMPORT_PATTERN = Regex("""\[?(Вы|AIIA|user|assistant|бот|Бот)\]?\s*:""", RegexOption.IGNORE_CASE)
+        private const val MAX_IMPORT_MESSAGES = 2000
 
         const val QUICK_PREDICT_LENGTH = 128
     }

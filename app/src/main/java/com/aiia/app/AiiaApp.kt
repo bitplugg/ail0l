@@ -3,8 +3,8 @@ package com.aiia.app
 import android.app.Application
 import android.os.Build
 import com.aiia.app.dm.Dependencies
-import com.aiia.app.sync.SyncScheduler
 import com.aiia.app.plugins.mcp.McpServerConfig
+import com.aiia.app.sync.SyncScheduler
 import com.aiia.app.util.Notifications
 import com.aiia.app.util.uniqueId
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +27,8 @@ class AiiaApp : Application() {
         Notifications.ensureModelChannel(this)
 
         scope.launch {
+            runCatching { Dependencies.settings.migratePlaintextSecrets() }
+
             val settings = Dependencies.settings.settings.first()
 
             runCatching { Dependencies.personas.ensureDefault() }
@@ -45,15 +47,19 @@ class AiiaApp : Application() {
             }
 
             runCatching {
-                val removed = Dependencies.db.dao()
-                    .deleteOldFacts(System.currentTimeMillis() - FACTS_TTL_MS)
+                val removed =
+                    Dependencies.db.dao()
+                        .deleteOldFacts(System.currentTimeMillis() - FACTS_TTL_MS)
                 if (removed > 0) {
                     android.util.Log.i("AIIA", "Auto-cleaned $removed stale facts")
                 }
             }
 
             Dependencies.provision.provisionOrEnsure()
-            if (settings.ragEnabled) runCatching { Dependencies.vectorSearch.ensureIndexed() }
+            if (settings.ragEnabled) {
+                runCatching { Dependencies.vectorSearch.ensureIndexed() }
+                runCatching { Dependencies.embeddings.ensure() }
+            }
 
             if (settings.apiEnabled || settings.p2pEnabled) {
                 com.aiia.app.api.ApiServerService.start(applicationContext)

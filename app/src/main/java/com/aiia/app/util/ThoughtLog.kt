@@ -1,15 +1,14 @@
 package com.aiia.app.util
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object ThoughtLog {
-
     enum class Tag { THINK, MEMORY, CONTEXT, TOOL, SYNC }
 
     data class Entry(
@@ -48,6 +47,5 @@ object ThoughtLog {
 
     fun entries(): List<Entry> = entries.toList()
 
-    fun timeLabel(at: Long): String =
-        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(at))
+    fun timeLabel(at: Long): String = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(at))
 }

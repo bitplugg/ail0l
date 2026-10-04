@@ -21,6 +21,9 @@ interface InferenceEngine {
 
     suspend fun setSamplerParams(temp: Float, topK: Int, topP: Float)
 
+    /** Constrains generation with GBNF; null or blank removes the constraint. */
+    suspend fun setGrammar(grammar: String?) {}
+
 
     suspend fun setLoraAdapter(path: String, scale: Float = 1.0f) {}
 

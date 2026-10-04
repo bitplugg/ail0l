@@ -2,12 +2,12 @@ package com.aiia.app.plugins.store
 
 import com.aiia.app.util.ApkIntegrityVerifier
 import com.aiia.app.util.Http
+import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.Request
-import java.io.File
-import java.io.IOException
 
 data class DownloadedPlugin(
     val file: File,
@@ -20,12 +20,13 @@ class PluginStoreClient(
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
     suspend fun catalog(): PluginStoreCatalog = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url(catalogUrl)
-            .header("Accept", "application/json")
-            .header("User-Agent", "AIIA/1.0")
-            .get()
-            .build()
+        val request =
+            Request.Builder()
+                .url(catalogUrl)
+                .header("Accept", "application/json")
+                .header("User-Agent", "AIIA/1.0")
+                .get()
+                .build()
         Http.client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("Catalog HTTP ${response.code}")
             json.decodeFromString(response.body?.string().orEmpty())
@@ -50,12 +51,13 @@ class PluginStoreClient(
             val manifestTarget = File(directory, "$safeSlug.manifest.json")
             val manifestPartial = File(directory, "${manifestTarget.name}.part")
             val manifestUrl = if (plugin.manifest.startsWith("http")) plugin.manifest else "$base/${plugin.manifest}"
-            val manifestRequest = Request.Builder()
-                .url(manifestUrl)
-                .header("Accept", "application/json")
-                .header("User-Agent", "AIIA/1.0")
-                .get()
-                .build()
+            val manifestRequest =
+                Request.Builder()
+                    .url(manifestUrl)
+                    .header("Accept", "application/json")
+                    .header("User-Agent", "AIIA/1.0")
+                    .get()
+                    .build()
             Http.client.newCall(manifestRequest).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("Manifest HTTP ${response.code}")
                 val body = response.body ?: throw IOException("Empty manifest response")
@@ -91,8 +93,7 @@ class PluginStoreClient(
         DownloadedPlugin(target, digest, target.length())
     }
 
-    private fun safeName(value: String): String =
-        value.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "plugin" }
+    private fun safeName(value: String): String = value.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "plugin" }
 
     companion object {
         const val DEFAULT_CATALOG_URL = "https://bitplugg.github.io/aiia-plugin-store/catalog/catalog.json"

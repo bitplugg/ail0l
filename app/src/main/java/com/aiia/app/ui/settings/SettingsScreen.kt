@@ -10,18 +10,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -30,6 +29,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,27 +41,28 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aiia.app.ai.Engine
+import com.aiia.app.ai.embeddings.EmbeddingModels
 import com.aiia.app.dm.Dependencies
 import com.aiia.app.plugins.store.PluginStoreViewModel
 import com.aiia.app.plugins.store.StorePlugin
 import com.aiia.app.terminal.ShizukuBridge
-import kotlinx.coroutines.launch
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 private enum class SettingsCategory(val title: String, val icon: ImageVector) {
     ENGINE("Движок и Модели", Icons.Filled.Memory),
@@ -74,10 +75,7 @@ private enum class SettingsCategory(val title: String, val icon: ImageVector) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
-fun SettingsScreen(
-    viewModel: SettingsViewModel = viewModel(),
-    initialCategory: String? = null
-) {
+fun SettingsScreen(viewModel: SettingsViewModel = viewModel(), initialCategory: String? = null) {
     var selected by rememberSaveable { mutableStateOf(initialCategory) }
     val category = selected?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
     SharedTransitionLayout {
@@ -124,11 +122,7 @@ private fun SettingsRoot(onOpen: (SettingsCategory) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsCategoryScreen(
-    category: SettingsCategory,
-    viewModel: SettingsViewModel,
-    onBack: () -> Unit
-) {
+private fun SettingsCategoryScreen(category: SettingsCategory, viewModel: SettingsViewModel, onBack: () -> Unit) {
     val s by viewModel.settings.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     Scaffold(
@@ -224,11 +218,12 @@ private fun SystemSettings(s: com.aiia.app.data.Settings, vm: SettingsViewModel)
         OutlinedButton(
             onClick = {
                 scope.launch {
-                    shizukuMessage = if (ShizukuBridge.requestPermission()) {
-                        "Shizuku готов"
-                    } else {
-                        "Не удалось получить binder или разрешение Shizuku"
-                    }
+                    shizukuMessage =
+                        if (ShizukuBridge.requestPermission()) {
+                            "Shizuku готов"
+                        } else {
+                            "Не удалось получить binder или разрешение Shizuku"
+                        }
                 }
             },
             enabled = !s.shizukuEnabled || !shizukuReady,
@@ -239,6 +234,14 @@ private fun SystemSettings(s: com.aiia.app.data.Settings, vm: SettingsViewModel)
         }
         Toggle("Root-доступ", s.rootEnabled, { vm.setRoot(it) })
         Toggle("Подтверждать системные вызовы", s.confirmToolCalls, { vm.setConfirmTools(it) })
+        Toggle(
+            "Строгий формат вызова инструментов (GBNF)",
+            s.strictToolCalls,
+            { enabled ->
+                // Kept off the view model: it already sits at the function-count limit.
+                scope.launch { Dependencies.settings.setStrictToolCalls(enabled) }
+            }
+        )
         Text("Режим терминала", style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("shell" to "Shell", "root" to "Root", "shizuku" to "Shizuku").forEach { (value, label) ->
@@ -307,11 +310,51 @@ private fun ExtensionSettings(s: com.aiia.app.data.Settings, vm: SettingsViewMod
 
 @Composable
 private fun MemorySettings(s: com.aiia.app.data.Settings, vm: SettingsViewModel) {
+    val embedding by Dependencies.embeddings.state.collectAsState()
+    val spec = EmbeddingModels.DEFAULT
+    val installed = s.embeddingModelPath.isNotBlank() && java.io.File(s.embeddingModelPath).isFile
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Toggle("Семантическая память", s.ragEnabled) { vm.setRag(it, s.embeddingModelPath, s.embeddingDimensions) }
-        Field("ONNX embedding model", s.embeddingModelPath, { vm.setRag(s.ragEnabled, it, s.embeddingDimensions) })
-        Text("Размер вектора: ${s.embeddingDimensions}")
-        Slider(s.embeddingDimensions.toFloat(), { vm.setRag(s.ragEnabled, s.embeddingModelPath, it.toInt()) }, valueRange = 128f..1024f)
+
+        if (s.ragEnabled) {
+            Text(
+                "Модель эмбеддингов: ${spec.label}, ${spec.displaySize()}",
+                style = MaterialTheme.typography.bodySmall
+            )
+            when {
+                installed -> Text(
+                    "Установлена, размер вектора ${s.embeddingDimensions}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                embedding.running -> {
+                    LinearProgressIndicator(
+                        progress = { embedding.percent() / 100f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Скачивание: ${embedding.percent()}%",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                embedding.error != null -> Text(
+                    "Не удалось скачать модель: ${embedding.error}. Повторите попытку или укажите файл вручную.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { Dependencies.embeddings.install(spec) }) { Text("Скачать модель") }
+                }
+            }
+            if (installed) {
+                Field(
+                    "Путь к модели",
+                    s.embeddingModelPath,
+                    { vm.setRag(s.ragEnabled, it, s.embeddingDimensions) }
+                )
+            }
+        }
+
         Toggle("Хранить факты", s.memoryEnabled, { vm.setMemoryEnabled(it) })
         Toggle("Автообучение", s.autoLearnEnabled, { vm.setAutoLearn(it) })
     }
@@ -334,12 +377,7 @@ private fun AppearanceSettings(s: com.aiia.app.data.Settings, vm: SettingsViewMo
 }
 
 @Composable
-private fun PluginStoreCard(
-    plugin: StorePlugin,
-    installed: Boolean,
-    downloading: Boolean,
-    onDownload: () -> Unit
-) {
+private fun PluginStoreCard(plugin: StorePlugin, installed: Boolean, downloading: Boolean, onDownload: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),

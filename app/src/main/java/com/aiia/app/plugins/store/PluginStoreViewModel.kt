@@ -4,11 +4,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aiia.app.dm.Dependencies
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 
 data class PluginStoreState(
     val catalog: PluginStoreCatalog? = null,
@@ -39,25 +39,28 @@ class PluginStoreViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 val directory = File(getApplication<Application>().filesDir, "plugin-store")
                 val downloaded = client.download(plugin, directory)
-                val installed = Dependencies.plugins.install(
-                    downloaded.file,
-                    plugin.sha256,
-                    plugin.signerSha256,
-                    plugin.manifestSha256
-                )
+                val installed =
+                    Dependencies.plugins.install(
+                        downloaded.file,
+                        plugin.sha256,
+                        plugin.signerSha256,
+                        plugin.manifestSha256
+                    )
                 Triple(plugin, downloaded, installed)
             }.onSuccess { (plugin, downloaded, installed) ->
-                _state.value = _state.value.copy(
-                    downloading = null,
-                    notice = when (installed) {
-                        is com.aiia.app.plugins.engine.InstallState.AwaitingPermission ->
-                            "Проверьте permissions и подтвердите установку"
-                        is com.aiia.app.plugins.engine.InstallState.Installed ->
-                            "${plugin.name} установлен · ${downloaded.sha256.take(12)}"
-                        is com.aiia.app.plugins.engine.InstallState.Failed -> "Ошибка установки: ${installed.message}"
-                        else -> null
-                    }
-                )
+                _state.value =
+                    _state.value.copy(
+                        downloading = null,
+                        notice =
+                        when (installed) {
+                            is com.aiia.app.plugins.engine.InstallState.AwaitingPermission ->
+                                "Проверьте permissions и подтвердите установку"
+                            is com.aiia.app.plugins.engine.InstallState.Installed ->
+                                "${plugin.name} установлен · ${downloaded.sha256.take(12)}"
+                            is com.aiia.app.plugins.engine.InstallState.Failed -> "Ошибка установки: ${installed.message}"
+                            else -> null
+                        }
+                    )
             }.onFailure {
                 _state.value = _state.value.copy(downloading = null, error = it.message ?: "Download failed")
             }

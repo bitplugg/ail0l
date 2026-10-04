@@ -7,7 +7,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 @Serializable
@@ -25,23 +24,31 @@ data class McpTool(
     val description: String,
     val inputSchema: JsonObject
 ) {
-    fun prompt(): String = "$server/$name: $description ${inputSchema}"
+    fun prompt(): String = "$server/$name: $description $inputSchema"
 }
 
 interface McpTransport : AutoCloseable {
     suspend fun initialize(): JsonObject
+
     suspend fun listTools(): List<McpTool>
+
     suspend fun callTool(name: String, arguments: JsonObject): JsonElement
 }
 
 internal object McpJson {
-    val format = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    val format =
+        Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+
     fun request(id: Long, method: String, params: JsonObject = buildJsonObject {}): JsonObject = buildJsonObject {
         put("jsonrpc", JsonPrimitive("2.0"))
         put("id", JsonPrimitive(id))
         put("method", JsonPrimitive(method))
         put("params", params)
     }
+
     fun resultObject(element: JsonElement): JsonObject {
         val root = element.jsonObject
         return root["result"]?.jsonObject ?: root

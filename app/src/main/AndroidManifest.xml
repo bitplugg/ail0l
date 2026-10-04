@@ -18,6 +18,12 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <!--
+      Cleartext HTTP stays enabled at the platform level because P2P sync and the local
+      OpenAI-compatible API serve arbitrary LAN peers whose addresses cannot be enumerated in
+      a network security config. Everything that leaves the device is forced to HTTPS in code
+      by com.aiia.app.util.EndpointPolicy.
+    -->
     <application
         android:name=".AiiaApp"
         android:allowBackup="true"
@@ -28,8 +34,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.AIIA"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
         <activity

@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.aiia.app.AiiaApp
 import com.aiia.app.R
 import com.aiia.app.agent.Agent
 import com.aiia.app.data.SettingsRepository
@@ -18,6 +17,7 @@ import com.aiia.app.dm.Dependencies
 import com.aiia.app.sync.P2pReceiver
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.application.install
@@ -30,7 +30,7 @@ import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import io.ktor.serialization.kotlinx.json.json
+import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,15 +41,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import java.util.UUID
 
 class ApiServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -78,109 +77,140 @@ class ApiServerService : Service() {
     }
 
     private fun startServer(bindPort: Int) {
-        server = embeddedServer(CIO, host = "127.0.0.1", port = bindPort) {
-            install(ContentNegotiation) { json(json) }
-            routing {
-                get("/health") {
-                    call.respond(mapOf("status" to "ok", "service" to "aiia"))
-                }
-                get("/v1/models") {
-                    if (!call.authorized()) return@get
-                    call.respond(buildJsonObject {
-                        put("object", JsonPrimitive("list"))
-                        put("data", kotlinx.serialization.json.buildJsonArray {
-                            add(buildJsonObject {
-                                put("id", JsonPrimitive("local"))
-                                put("object", JsonPrimitive("model"))
-                            })
-                        })
-                    })
-                }
-                post("/v1/chat/completions") {
-                    if (!call.authorized()) {
-                        call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "unauthorized"))
-                        return@post
+        server =
+            embeddedServer(CIO, host = "127.0.0.1", port = bindPort) {
+                install(ContentNegotiation) { json(json) }
+                routing {
+                    get("/health") {
+                        call.respond(mapOf("status" to "ok", "service" to "aiia"))
                     }
-                    val body = runCatching { json.parseToJsonElement(call.receiveText()).jsonObject }
-                        .getOrNull()
-                        ?: run {
-                            call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid json"))
+                    get("/v1/models") {
+                        if (!call.authorized()) return@get
+                        call.respond(
+                            buildJsonObject {
+                                put("object", JsonPrimitive("list"))
+                                put(
+                                    "data",
+                                    kotlinx.serialization.json.buildJsonArray {
+                                        add(
+                                            buildJsonObject {
+                                                put("id", JsonPrimitive("local"))
+                                                put("object", JsonPrimitive("model"))
+                                            }
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    }
+                    post("/v1/chat/completions") {
+                        if (!call.authorized()) {
+                            call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "unauthorized"))
                             return@post
                         }
-                    val job = ApiJob(
-                        request = body,
-                        output = Channel(Channel.UNLIMITED),
-                        done = CompletableDeferred()
-                    )
-                    requests.send(job)
-                    if (body["stream"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true) {
-                        call.respondTextWriter(ContentType.Text.EventStream) {
-                            for (chunk in job.output) {
-                                if (chunk == DONE) {
-                                    write("data: [DONE]\n\n")
-                                    flush()
-                                    break
+                        val body =
+                            runCatching { json.parseToJsonElement(call.receiveText()).jsonObject }
+                                .getOrNull()
+                                ?: run {
+                                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid json"))
+                                    return@post
                                 }
-                                write("data: ${chunk}\n\n")
-                                flush()
+                        val job =
+                            ApiJob(
+                                request = body,
+                                output = Channel(Channel.UNLIMITED),
+                                done = CompletableDeferred()
+                            )
+                        requests.send(job)
+                        if (body["stream"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true) {
+                            call.respondTextWriter(ContentType.Text.EventStream) {
+                                for (chunk in job.output) {
+                                    if (chunk == DONE) {
+                                        write("data: [DONE]\n\n")
+                                        flush()
+                                        break
+                                    }
+                                    write("data: ${chunk}\n\n")
+                                    flush()
+                                }
                             }
+                        } else {
+                            val text =
+                                buildString {
+                                    for (chunk in job.output) {
+                                        if (chunk != DONE) {
+                                            append(
+                                                json.parseToJsonElement(chunk).jsonObject["choices"]
+                                                    ?.jsonArray?.firstOrNull()?.jsonObject
+                                                    ?.get("message")?.jsonObject
+                                                    ?.get("content")?.jsonPrimitive?.content.orEmpty()
+                                            )
+                                        }
+                                    }
+                                }
+                            call.respond(
+                                buildJsonObject {
+                                    put("id", JsonPrimitive(UUID.randomUUID().toString()))
+                                    put("object", JsonPrimitive("chat.completion"))
+                                    put(
+                                        "choices",
+                                        kotlinx.serialization.json.buildJsonArray {
+                                            add(
+                                                buildJsonObject {
+                                                    put("index", JsonPrimitive(0))
+                                                    put(
+                                                        "message",
+                                                        buildJsonObject {
+                                                            put("role", JsonPrimitive("assistant"))
+                                                            put("content", JsonPrimitive(text))
+                                                        }
+                                                    )
+                                                    put("finish_reason", JsonPrimitive("stop"))
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            )
                         }
-                    } else {
-                        val text = buildString {
-                            for (chunk in job.output) {
-                                if (chunk != DONE) append(json.parseToJsonElement(chunk).jsonObject["choices"]
-                                    ?.jsonArray?.firstOrNull()?.jsonObject
-                                    ?.get("message")?.jsonObject
-                                    ?.get("content")?.jsonPrimitive?.content.orEmpty())
-                            }
-                        }
-                        call.respond(buildJsonObject {
-                            put("id", JsonPrimitive(UUID.randomUUID().toString()))
-                            put("object", JsonPrimitive("chat.completion"))
-                            put("choices", kotlinx.serialization.json.buildJsonArray {
-                                add(buildJsonObject {
-                                    put("index", JsonPrimitive(0))
-                                    put("message", buildJsonObject { put("role", JsonPrimitive("assistant")); put("content", JsonPrimitive(text)) })
-                                    put("finish_reason", JsonPrimitive("stop"))
-                                })
-                            })
-                        })
                     }
-                }
-                post("/p2p/receive") {
-                    if (!call.authorized()) {
-                        call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "unauthorized"))
-                    } else {
-                        val accepted = runCatching {
-                            P2pReceiver.receive(Dependencies.db, settings ?: SettingsRepository(applicationContext), call.receiveText())
-                        }.getOrDefault(0)
-                        call.respond(HttpStatusCode.OK, mapOf("accepted" to accepted))
+                    post("/p2p/receive") {
+                        if (!call.authorized()) {
+                            call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "unauthorized"))
+                        } else {
+                            val accepted =
+                                runCatching {
+                                    P2pReceiver.receive(Dependencies.db, settings ?: SettingsRepository(applicationContext), call.receiveText())
+                                }.getOrDefault(0)
+                            call.respond(HttpStatusCode.OK, mapOf("accepted" to accepted))
+                        }
                     }
                 }
             }
-        }
         scope.launch { server?.start(wait = true) }
     }
 
     private fun startP2pServer(bindPort: Int) {
-        p2pServer = embeddedServer(CIO, host = "0.0.0.0", port = bindPort) {
-            routing {
-                post("/p2p/receive") {
-                    if (!call.authorized()) {
-                        call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "unauthorized"))
-                    } else {
-                        val accepted = runCatching {
-                            P2pReceiver.receive(
-                                Dependencies.db,
-                                settings ?: SettingsRepository(applicationContext),
-                                call.receiveText()
-                            )
-                        }.getOrDefault(0)
-                        call.respond(HttpStatusCode.OK, mapOf("accepted" to accepted))
+        p2pServer =
+            embeddedServer(CIO, host = "0.0.0.0", port = bindPort) {
+                routing {
+                    post("/p2p/receive") {
+                        if (!call.authorized()) {
+                            call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "unauthorized"))
+                        } else {
+                            val accepted =
+                                runCatching {
+                                    P2pReceiver.receive(
+                                        Dependencies.db,
+                                        settings ?: SettingsRepository(applicationContext),
+                                        call.receiveText()
+                                    )
+                                }.getOrDefault(0)
+                            call.respond(HttpStatusCode.OK, mapOf("accepted" to accepted))
+                        }
                     }
                 }
             }
-        }
         scope.launch { p2pServer?.start(wait = true) }
     }
 
@@ -189,12 +219,15 @@ class ApiServerService : Service() {
             try {
                 val messages = job.request["messages"]?.jsonArray.orEmpty()
                 val prompt = messages.lastOrNull()?.jsonObject?.get("content")?.jsonPrimitive?.content.orEmpty()
-                val conversationId = Dependencies.db.dao().insertConversation(
-                    ConversationEntity(title = "OpenAI API")
-                )
+                val conversationId =
+                    Dependencies.db.dao().insertConversation(
+                        ConversationEntity(title = "OpenAI API")
+                    )
                 val result = StringBuilder()
                 Dependencies.agent.send(conversationId, prompt).collect { event ->
                     when (event) {
+                        // Chain-of-thought is internal: an API client asked for the answer.
+                        is Agent.Event.Thinking -> Unit
                         is Agent.Event.Token -> {
                             result.append(event.text)
                             if (job.request["stream"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() == true) {
@@ -230,28 +263,41 @@ class ApiServerService : Service() {
     private fun streamChunk(text: String): String = buildJsonObject {
         put("id", JsonPrimitive(UUID.randomUUID().toString()))
         put("object", JsonPrimitive("chat.completion.chunk"))
-        put("choices", kotlinx.serialization.json.buildJsonArray {
-            add(buildJsonObject {
-                put("index", JsonPrimitive(0))
-                put("delta", buildJsonObject { put("content", JsonPrimitive(text)) })
-                put("finish_reason", JsonNull)
-            })
-        })
+        put(
+            "choices",
+            kotlinx.serialization.json.buildJsonArray {
+                add(
+                    buildJsonObject {
+                        put("index", JsonPrimitive(0))
+                        put("delta", buildJsonObject { put("content", JsonPrimitive(text)) })
+                        put("finish_reason", JsonNull)
+                    }
+                )
+            }
+        )
     }.toString()
 
     private fun completion(text: String): String = buildJsonObject {
         put("id", JsonPrimitive(UUID.randomUUID().toString()))
         put("object", JsonPrimitive("chat.completion"))
-        put("choices", kotlinx.serialization.json.buildJsonArray {
-            add(buildJsonObject {
-                put("index", JsonPrimitive(0))
-                put("message", buildJsonObject {
-                    put("role", JsonPrimitive("assistant"))
-                    put("content", JsonPrimitive(text))
-                })
-                put("finish_reason", JsonPrimitive("stop"))
-            })
-        })
+        put(
+            "choices",
+            kotlinx.serialization.json.buildJsonArray {
+                add(
+                    buildJsonObject {
+                        put("index", JsonPrimitive(0))
+                        put(
+                            "message",
+                            buildJsonObject {
+                                put("role", JsonPrimitive("assistant"))
+                                put("content", JsonPrimitive(text))
+                            }
+                        )
+                        put("finish_reason", JsonPrimitive("stop"))
+                    }
+                )
+            }
+        )
     }.toString()
 
     private fun errorChunk(message: String): String = buildJsonObject {
@@ -276,12 +322,13 @@ class ApiServerService : Service() {
     }
 
     private fun notification(text: String): Notification {
-        val intent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, Class.forName("com.aiia.app.ui.MainActivity")),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val intent =
+            PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, Class.forName("com.aiia.app.ui.MainActivity")),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("AIIA Local API")
@@ -311,4 +358,3 @@ private data class ApiJob(
     val output: Channel<String>,
     val done: CompletableDeferred<Unit>
 )
-

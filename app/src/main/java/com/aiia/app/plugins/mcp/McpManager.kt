@@ -17,11 +17,12 @@ class McpManager {
         disconnect()
         configs.filter { it.enabled }.forEach { config ->
             runCatching {
-                val transport = when (config.transport.lowercase()) {
-                    "stdio" -> StdioMcpTransport(config.name, config.command)
-                    "sse", "http", "https" -> HttpMcpTransport(config.name, config.url)
-                    else -> error("Unknown MCP transport: ${config.transport}")
-                }
+                val transport =
+                    when (config.transport.lowercase()) {
+                        "stdio" -> StdioMcpTransport(config.name, config.command)
+                        "sse", "http", "https" -> HttpMcpTransport(config.name, config.url)
+                        else -> error("Unknown MCP transport: ${config.transport}")
+                    }
                 transport.initialize()
                 transports[config.name] = transport
             }.onFailure { error ->
@@ -41,8 +42,7 @@ class McpManager {
         _tools.value = all
     }
 
-    suspend fun call(server: String, tool: String, arguments: JsonObject = buildJsonObject {}) =
-        transports[server]?.callTool(tool, arguments)
+    suspend fun call(server: String, tool: String, arguments: JsonObject = buildJsonObject {}) = transports[server]?.callTool(tool, arguments)
 
     fun disconnect() {
         transports.values.forEach { runCatching { it.close() } }

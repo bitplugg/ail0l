@@ -14,9 +14,10 @@ object Tts {
         ttsRef.get()?.let { return it }
         synchronized(this) {
             ttsRef.get()?.let { return it }
-            val created = TextToSpeech(context.applicationContext) { status ->
-                configured.set(status == TextToSpeech.SUCCESS)
-            }
+            val created =
+                TextToSpeech(context.applicationContext) { status ->
+                    configured.set(status == TextToSpeech.SUCCESS)
+                }
             runCatching { created.language = Locale.getDefault() }
             ttsRef.set(created)
             return created

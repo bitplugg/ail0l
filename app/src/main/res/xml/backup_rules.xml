@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  AIIA keeps conversations, memory facts and the sync queues in a private Room database.
+  Listing an <include> makes everything else opt-out by default, so cloud backup carries
+  preferences only: the database, the DataStore secrets and the model files stay on the device
+  unless the user exports them explicitly (Settings -> Data -> Export).
+
+  Model files (GGUF/mmproj) are excluded for free as well: they are multi-gigabyte downloads that
+  the in-app downloader can resume, and they would blow past backup quotas.
+-->
 <full-backup-content>
-    <include domain="database" path="." />
     <include domain="sharedpref" path="." />
-    <include domain="file" path="models/" />
 </full-backup-content>

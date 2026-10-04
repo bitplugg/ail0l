@@ -25,6 +25,5 @@ object DeviceProfile {
         return stat.availableBytes
     }
 
-    fun usableRamBytes(context: Context): Long =
-        (ramBytes(context) * 0.7).toLong().coerceAtLeast(1)
+    fun usableRamBytes(context: Context): Long = (ramBytes(context) * 0.7).toLong().coerceAtLeast(1)
 }

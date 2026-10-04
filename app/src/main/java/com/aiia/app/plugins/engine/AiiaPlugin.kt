@@ -35,6 +35,8 @@ data class PluginTool(
 
 interface AiiaPlugin {
     val manifest: PluginManifest
+
     fun tools(): List<PluginTool>
+
     suspend fun call(name: String, arguments: JsonObject): String
 }

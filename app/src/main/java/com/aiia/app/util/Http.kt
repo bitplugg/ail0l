@@ -1,24 +1,22 @@
 package com.aiia.app.util
 
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 object Http {
-    val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    val client: OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
 }
 
-suspend fun streamSseData(
-    request: Request,
-    onData: suspend (String) -> Unit
-): Unit = withContext(Dispatchers.IO) {
+suspend fun streamSseData(request: Request, onData: suspend (String) -> Unit): Unit = withContext(Dispatchers.IO) {
     val response = Http.client.newCall(request).execute()
     if (!response.isSuccessful) {
         val body = response.body?.string().orEmpty()

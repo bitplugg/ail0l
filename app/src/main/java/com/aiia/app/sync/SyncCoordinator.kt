@@ -7,10 +7,10 @@ import com.aiia.app.data.entities.InboxEntity
 import com.aiia.app.data.entities.MessageEntity
 import com.aiia.app.data.entities.OutboxEntity
 import com.aiia.app.util.Crypto
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
+import com.aiia.app.util.EndpointPolicy
+import com.aiia.app.util.ThoughtLog
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.flow.first
 
 data class SyncReport(
     val pushed: Int = 0,
@@ -23,7 +23,6 @@ class SyncCoordinator(
     private val settingsRepo: SettingsRepository,
     private val context: Context
 ) {
-
     private val cursorByServer = ConcurrentHashMap<String, Long>()
 
     suspend fun syncNow(): SyncReport {
@@ -46,18 +45,20 @@ class SyncCoordinator(
         val pulled = mutableListOf<WireMessage>()
         return try {
             if (settings.p2pEnabled) {
-                val nsd = NsdSyncManager(
-                    context = context,
-                    servicePort = settings.p2pPort,
-                    deviceId = device
-                )
+                val nsd =
+                    NsdSyncManager(
+                        context = context,
+                        servicePort = settings.p2pPort,
+                        deviceId = device
+                    )
                 nsd.startAdvertising()
                 val peers = nsd.discoverFor()
                 val p2pChannel = MessagingChannel("", password)
                 toSend.forEach { outbox ->
-                    val targets = peers.filter { peer ->
-                        outbox.toDevice.isBlank() || peer.deviceId == outbox.toDevice || peer.name == outbox.toDevice
-                    }
+                    val targets =
+                        peers.filter { peer ->
+                            outbox.toDevice.isBlank() || peer.deviceId == outbox.toDevice || peer.name == outbox.toDevice
+                        }
                     targets.forEach { peer ->
                         runCatching {
                             p2pChannel.sendP2p(peer, listOf(outbox.toWire(device, encrypt)))
@@ -70,7 +71,7 @@ class SyncCoordinator(
                 nsd.stop()
             }
             val base = settings.syncBaseUrl.trimEnd('/')
-            if (base.isNotBlank()) {
+            if (base.isNotBlank() && EndpointPolicy.isAllowed(base, allowPrivateHosts = false)) {
                 val channel = MessagingChannel(base, password)
                 val cloudCandidates = toSend.filter { it.id !in sentIds }
                 val cloudMessages = cloudCandidates.map { it.toWire(device, encrypt) }
@@ -83,24 +84,36 @@ class SyncCoordinator(
                 pulled += channel.pull(device, after)
                 pulled.forEach { m ->
                     val text = decrypt(m.content)
-                    val inserted = db.dao().insertInbox(InboxEntity(
-                        remoteId = m.id,
-                        conversationId = m.conversationId,
-                        sender = m.sender,
-                        content = text,
-                        createdAt = m.createdAt
-                    ))
+                    val inserted =
+                        db.dao().insertInbox(
+                            InboxEntity(
+                                remoteId = m.id,
+                                conversationId = m.conversationId,
+                                sender = m.sender,
+                                content = text,
+                                createdAt = m.createdAt
+                            )
+                        )
                     val roomId = m.conversationId
                     if (inserted != -1L && roomId != null && roomId in ourConversations()) {
-                        db.dao().insertMessage(MessageEntity(
-                            conversationId = roomId,
-                            role = "assistant",
-                            content = text,
-                            createdAt = m.createdAt
-                        ))
+                        db.dao().insertMessage(
+                            MessageEntity(
+                                conversationId = roomId,
+                                role = "assistant",
+                                content = text,
+                                createdAt = m.createdAt
+                            )
+                        )
                     }
                     if (m.createdAt > after) cursorByServer[base] = m.createdAt
                 }
+            } else if (base.isNotBlank()) {
+                val reason =
+                    when (val verdict = EndpointPolicy.check(base, allowPrivateHosts = false)) {
+                        is EndpointPolicy.Verdict.Allowed -> "Облачный адрес не настроен"
+                        is EndpointPolicy.Verdict.Rejected -> verdict.reason
+                    }
+                ThoughtLog.add(ThoughtLog.Tag.SYNC, "Облачная синхронизация пропущена: $reason")
             }
             SyncReport(pushed = pushed, pulled = pulled.size)
         } catch (e: Exception) {
@@ -117,6 +130,5 @@ class SyncCoordinator(
         createdAt = createdAt
     )
 
-    private suspend fun ourConversations(): Set<Long> =
-        db.dao().observeConversations().first().mapTo(HashSet()) { it.id }
+    private suspend fun ourConversations(): Set<Long> = db.dao().observeConversations().first().mapTo(HashSet()) { it.id }
 }

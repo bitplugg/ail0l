@@ -6,6 +6,25 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.ktlint)
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    parallel = true
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    baseline = rootProject.file("config/detekt/baseline-app.xml")
+    ignoreFailures = providers.gradleProperty("detekt.ignoreFailures").orNull == "true"
+}
+
+ktlint {
+    android.set(true)
+    ignoreFailures.set(providers.gradleProperty("ktlint.ignoreFailures").orNull == "true")
+    filter {
+        exclude { it.file.path.contains("${File.separator}build${File.separator}") }
+        exclude { it.file.path.contains("${File.separator}generated${File.separator}") }
+    }
 }
 
 android {
@@ -16,8 +35,8 @@ android {
         applicationId = "com.aiia.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.0.5"
+        versionCode = 6
+        versionName = "0.0.6"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -61,11 +80,12 @@ android {
                 "proguard-rules.pro"
             )
 
-
-            signingConfig = if (rootProject.file("keystore.properties").exists())
-                signingConfigs.getByName("release")
-            else
-                signingConfigs.getByName("debug")
+            signingConfig =
+                if (rootProject.file("keystore.properties").exists()) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
         }
     }
 
@@ -80,6 +100,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
     }
 
     packaging {

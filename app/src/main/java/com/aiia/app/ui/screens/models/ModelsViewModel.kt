@@ -19,8 +19,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -35,7 +35,6 @@ data class ModelUi(
 )
 
 class ModelsViewModel(app: android.app.Application) : AndroidViewModel(app) {
-
     private val provision = Dependencies.provision
     private var downloadManager: ModelDownloadManager? = null
 
@@ -72,17 +71,21 @@ class ModelsViewModel(app: android.app.Application) : AndroidViewModel(app) {
             val instPath = inst?.modelFile
             ModelCatalog.entries().map { entry ->
                 val localDir = Dependencies.provision.modelsDir()
-                val installedFlag = instPath != null &&
-                    instPath.endsWith("${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf")
+                val installedFlag =
+                    instPath != null &&
+                        instPath.endsWith("${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf")
                 ModelUi(
                     entry = entry,
-                    installed = installedFlag || localDir.resolve(
-                        "${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf"
-                    ).isFile,
+                    installed =
+                    installedFlag ||
+                        localDir.resolve(
+                            "${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf"
+                        ).isFile,
                     downloading = prov.status == "downloading" && prov.entry == entry,
                     progress = prov.progress,
                     recommended = entry == recommendedEntry,
-                    active = instPath != null &&
+                    active =
+                    instPath != null &&
                         instPath.endsWith("${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf")
                 )
             }
@@ -102,42 +105,44 @@ class ModelsViewModel(app: android.app.Application) : AndroidViewModel(app) {
         if (query.isBlank()) return
         searchJob?.cancel()
         val generation = ++searchGeneration
-        searchJob = viewModelScope.launch {
-            _remoteSearching.value = true
-            _remoteError.value = null
-            _remoteModels.value = emptyList()
-            try {
-                val token = Dependencies.settings.settings.first().hfToken
-                val result = HuggingFaceModelsApi(token = token).search(query)
-                _remoteModels.value = result
-                if (result.isEmpty()) {
-                    _remoteError.value = "Hugging Face не вернул GGUF-файлы"
+        searchJob =
+            viewModelScope.launch {
+                _remoteSearching.value = true
+                _remoteError.value = null
+                _remoteModels.value = emptyList()
+                try {
+                    val token = Dependencies.settings.settings.first().hfToken
+                    val result = HuggingFaceModelsApi(token = token).search(query)
+                    _remoteModels.value = result
+                    if (result.isEmpty()) {
+                        _remoteError.value = "Hugging Face не вернул GGUF-файлы"
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    _remoteError.value = error.message ?: "Ошибка Hugging Face"
+                } finally {
+                    if (generation == searchGeneration) _remoteSearching.value = false
                 }
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (error: Throwable) {
-                _remoteError.value = error.message ?: "Ошибка Hugging Face"
-            } finally {
-                if (generation == searchGeneration) _remoteSearching.value = false
             }
-        }
     }
 
     fun downloadRemote(artifact: ModelArtifact) {
         viewModelScope.launch {
             val token = Dependencies.settings.settings.first().hfToken
-            val manager = downloadManager ?: ModelDownloadManager(
-                getApplication(),
-                token
-            ) { progress ->
-                _remoteProgress.value = progress
-                Notifications.ensureModelChannel(getApplication())
-                Notifications.notifyModelProgress(getApplication(), progress.downloadedBytes, progress.totalBytes)
-                if (progress.state == ModelDownloadProgress.State.COMPLETED) {
-                    Notifications.cancelModelProgress(getApplication())
+            val manager =
+                downloadManager ?: ModelDownloadManager(
+                    getApplication(),
+                    token
+                ) { progress ->
+                    _remoteProgress.value = progress
+                    Notifications.ensureModelChannel(getApplication())
+                    Notifications.notifyModelProgress(getApplication(), progress.downloadedBytes, progress.totalBytes)
+                    if (progress.state == ModelDownloadProgress.State.COMPLETED) {
+                        Notifications.cancelModelProgress(getApplication())
+                    }
                 }
-            }
-                .also { downloadManager = it }
+                    .also { downloadManager = it }
             _remoteError.value = null
             runCatching {
                 manager.download(artifact).collect { progress ->
@@ -175,9 +180,10 @@ class ModelsViewModel(app: android.app.Application) : AndroidViewModel(app) {
     fun selectLocal(entry: CatalogEntry) {
         viewModelScope.launch {
             val modelsDir = Dependencies.provision.modelsDir()
-            val path = modelsDir.resolve(
-                "${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf"
-            ).absolutePath
+            val path =
+                modelsDir.resolve(
+                    "${entry.family}-${entry.paramsLabel}-${entry.quant}.gguf"
+                ).absolutePath
             Dependencies.settings.setEngine(Engine.LOCAL)
             Dependencies.settings.setLocalModelPath(path)
             _refresh.value++

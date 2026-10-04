@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cloud backup (Google) carries preferences only.
+
+  Device-to-device transfer also carries the database, so a new phone keeps conversations,
+  memory facts and the vector index. Settings secrets (API keys, sync password, Hugging Face
+  token) live in files/datastore and are never listed, so they stay out of both directions;
+  model files under files/models are excluded for the same reason and because the in-app
+  downloader can re-fetch them.
+-->
 <data-extraction-rules>
     <cloud-backup>
-        <include domain="database" path="." />
         <include domain="sharedpref" path="." />
     </cloud-backup>
     <device-transfer>

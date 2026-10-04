@@ -3,7 +3,6 @@ package com.aiia.app.util
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -11,7 +10,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 
 object Markdown {
-
     fun render(text: String, accent: Color): AnnotatedString = buildAnnotatedString {
         text.split('\n').forEachIndexed { idx, line ->
             if (idx > 0) append('\n')
@@ -30,10 +28,7 @@ object Markdown {
         }
     }
 
-    private fun AnnotatedString.Builder.appendStyled(
-        text: String,
-        accent: Color
-    ) {
+    private fun AnnotatedString.Builder.appendStyled(text: String, accent: Color) {
         var i = 0
         while (i < text.length) {
             when {
@@ -45,7 +40,8 @@ object Markdown {
                         }
                         i = end + 2
                     } else {
-                        append('*'); i++
+                        append('*')
+                        i++
                     }
                 }
 
@@ -57,7 +53,8 @@ object Markdown {
                         }
                         i = end + 1
                     } else {
-                        append('`'); i++
+                        append('`')
+                        i++
                     }
                 }
 
@@ -69,17 +66,21 @@ object Markdown {
                         }
                         i = end + 1
                     } else {
-                        append('*'); i++
+                        append('*')
+                        i++
                     }
                 }
 
                 text.startsWith("[", i) -> {
                     val close = text.indexOf(']', i)
                     val open = text.indexOf('(', close)
-                    val end = if (close > 0 && open == close + 1) {
-                        val paren = text.indexOf(')', open)
-                        if (paren > 0) paren + 1 else -1
-                    } else -1
+                    val end =
+                        if (close > 0 && open == close + 1) {
+                            val paren = text.indexOf(')', open)
+                            if (paren > 0) paren + 1 else -1
+                        } else {
+                            -1
+                        }
                     if (end > 0) {
                         withStyle(
                             SpanStyle(
@@ -90,7 +91,8 @@ object Markdown {
                         ) { append(text.substring(i + 1, close)) }
                         i = end
                     } else {
-                        append('['); i++
+                        append('[')
+                        i++
                     }
                 }
 

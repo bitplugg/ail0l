@@ -1,7 +1,11 @@
 package com.aiia.app.agent
 
 import android.content.Context
+import com.aiia.app.agent.tools.ToolCall
+import com.aiia.app.agent.tools.ToolCallParser
+import com.aiia.app.agent.tools.ToolConfirmationCoordinator
 import com.aiia.app.ai.ChatMessage
+import com.aiia.app.ai.Grammar
 import com.aiia.app.ai.ImageAttachment
 import com.aiia.app.ai.download.DeviceProfile
 import com.aiia.app.ai.engines.AiEngine
@@ -11,15 +15,11 @@ import com.aiia.app.ai.search.WebSearch
 import com.aiia.app.data.AppDatabase
 import com.aiia.app.data.Settings
 import com.aiia.app.data.SettingsRepository
-import com.aiia.app.data.entities.ConversationEntity
 import com.aiia.app.data.entities.MessageEntity
 import com.aiia.app.data.entities.OutboxEntity
 import com.aiia.app.memory.MemoryManager
 import com.aiia.app.persona.PersonaRepository
 import com.aiia.app.plugins.mcp.McpManager
-import com.aiia.app.agent.tools.ToolCall
-import com.aiia.app.agent.tools.ToolCallParser
-import com.aiia.app.agent.tools.ToolConfirmationCoordinator
 import com.aiia.app.util.Reminders
 import com.aiia.app.util.SystemCommands
 import com.aiia.app.util.ThoughtLog
@@ -47,22 +47,25 @@ class Agent(
     private val mcp: McpManager? = null,
     private val webSearch: WebSearch = WebSearch()
 ) {
+    /** Tools the model may call this turn: MCP tools plus the built-in device tools. */
+    private fun toolsAvailable(settings: Settings): Boolean = settings.confirmToolCalls && (mcp?.tools?.value?.isNotEmpty() == true || settings.memoryEnabled)
 
     sealed interface Event {
         data class Token(val text: String) : Event
+
+        /** Chain-of-thought text, shown apart from the answer and stored in its own column. */
+        data class Thinking(val text: String) : Event
+
         data class Done(val full: String, val engineLabel: String) : Event
+
         data class Failure(val message: String) : Event
+
         data class ToolRequired(val call: ToolCall) : Event
     }
 
     private val busy = HashSet<Long>()
 
-    fun send(
-        conversationId: Long,
-        text: String,
-        predictLength: Int? = null,
-        images: List<ImageAttachment> = emptyList()
-    ): Flow<Event> = flow {
+    fun send(conversationId: Long, text: String, predictLength: Int? = null, images: List<ImageAttachment> = emptyList()): Flow<Event> = flow {
         val trimmed = text.trim()
         check(trimmed.isNotEmpty()) { "Пустое сообщение" }
         require(busy.add(conversationId)) { "Уже генерируем ответ в этом диалоге" }
@@ -70,8 +73,12 @@ class Agent(
             val settings = settingsRepo.settings.first()
             val conversation = db.dao().observeConversation(conversationId).first()
 
-            val recent = if (conversation != null)
-                db.dao().recentMessages(conversationId, RECENT_LIMIT) else emptyList()
+            val recent =
+                if (conversation != null) {
+                    db.dao().recentMessages(conversationId, RECENT_LIMIT)
+                } else {
+                    emptyList()
+                }
 
             db.dao().insertMessage(
                 MessageEntity(
@@ -95,9 +102,10 @@ class Agent(
                     emit(Event.Done("Пустое сообщение устройству.", "direct"))
                     return@flow
                 }
-                val contacts = runCatching {
-                    Json.parseToJsonElement(settings.contactsJson.ifBlank { "{}" }).jsonObject
-                }.getOrNull() ?: kotlinx.serialization.json.buildJsonObject {}
+                val contacts =
+                    runCatching {
+                        Json.parseToJsonElement(settings.contactsJson.ifBlank { "{}" }).jsonObject
+                    }.getOrNull() ?: kotlinx.serialization.json.buildJsonObject {}
                 val deviceId = contacts.entries.firstOrNull { it.key.equals(name, true) }?.value?.jsonPrimitive?.content
                 if (deviceId.isNullOrBlank()) {
                     emit(Event.Done("Нет устройства «$name» в списке.", "direct"))
@@ -134,11 +142,16 @@ class Agent(
             Reminders.parse(trimmed)?.let { req ->
                 val id = Reminders.schedule(appContext, req)
                 ThoughtLog.add(ThoughtLog.Tag.TOOL, if (req.isTimer) "Таймер запланирован" else "Напоминание запланировано")
-                emit(Event.Done(
-                    if (req.isTimer) "Поставил таймер: ⏱ ${req.text}"
-                    else "Напомню: ⏰ ${req.text}",
-                    "reminder"
-                ))
+                emit(
+                    Event.Done(
+                        if (req.isTimer) {
+                            "Поставил таймер: ⏱ ${req.text}"
+                        } else {
+                            "Напомню: ⏰ ${req.text}"
+                        },
+                        "reminder"
+                    )
+                )
                 return@flow
             }
 
@@ -146,18 +159,22 @@ class Agent(
             if (Weather.isAsking(trimmed)) {
                 val city = Weather.cityText(trimmed)
                 if (city.isNullOrBlank()) {
-                    emit(Event.Done(
-                        "Скажи город, например «погода в Москве» или «погода в СПб».",
-                        "weather"
-                    ))
+                    emit(
+                        Event.Done(
+                            "Скажи город, например «погода в Москве» или «погода в СПб».",
+                            "weather"
+                        )
+                    )
                     return@flow
                 }
                 val summary = Weather.byCityText(trimmed)
                 if (summary == null) {
-                    emit(Event.Done(
-                        "Не нашёл погоду для «$city». Попробуй город в именительном падеже, например «погода в Москва».",
-                        "weather"
-                    ))
+                    emit(
+                        Event.Done(
+                            "Не нашёл погоду для «$city». Попробуй город в именительном падеже, например «погода в Москва».",
+                            "weather"
+                        )
+                    )
                     return@flow
                 }
                 weatherInfo = summary
@@ -183,7 +200,7 @@ class Agent(
 
                     is MemoryManager.MemoryResult.FactMissing -> {
                         enqueueOutboxIfSync(settings, conversationId, trimmed)
-                        ThoughtLog.add(ThoughtLog.Tag.MEMORY, "Искал факт по «${trimmed}» — не нашёл")
+                        ThoughtLog.add(ThoughtLog.Tag.MEMORY, "Искал факт по «$trimmed» — не нашёл")
                         emit(Event.Done("Такого факта у меня нет.", "memory"))
                         return@flow
                     }
@@ -201,11 +218,12 @@ class Agent(
                     is MemoryManager.MemoryResult.DayFacts -> {
                         enqueueOutboxIfSync(settings, conversationId, trimmed)
                         ThoughtLog.add(ThoughtLog.Tag.MEMORY, "Факты за ${r.label}: ${r.facts.size} шт.")
-                        val label = when (r.label) {
-                            "вчера" -> "Вчерашний день"
-                            "позавчера" -> "Позавчерашний день"
-                            else -> "Сегодняшний день"
-                        }
+                        val label =
+                            when (r.label) {
+                                "вчера" -> "Вчерашний день"
+                                "позавчера" -> "Позавчерашний день"
+                                else -> "Сегодняшний день"
+                            }
                         if (r.facts.isEmpty()) {
                             emit(Event.Done("$label — я ничего не записал в память.", "memory"))
                         } else {
@@ -221,9 +239,10 @@ class Agent(
                         if (r.hits.isEmpty()) {
                             emit(Event.Done("Ничего не нашлось в диалогах по этому запросу.", "memory"))
                         } else {
-                            val text = r.hits.joinToString("\n") { (conv, snip) ->
-                                "— $conv\n   $snip"
-                            }
+                            val text =
+                                r.hits.joinToString("\n") { (conv, snip) ->
+                                    "— $conv\n   $snip"
+                                }
                             emit(Event.Done("Вот что я нашёл в диалогах:\n$text", "memory"))
                         }
                         return@flow
@@ -234,17 +253,26 @@ class Agent(
 
             enqueueOutboxIfSync(settings, conversationId, trimmed)
 
-            val webResults = if (trimmed.lowercase().startsWith(PREFIX_WEB)) {
-                val q = trimmed.substring(PREFIX_WEB.length).trim()
-                if (q.isNotBlank()) {
-                    val res = webSearch.search(q, settings.searchUrl, settings.searchKey)
-                    ThoughtLog.add(ThoughtLog.Tag.TOOL, "Веб-поиск «$q»: ${res.size} результатов")
-                    res
-                } else emptyList()
-            } else emptyList()
+            val webResults =
+                if (trimmed.lowercase().startsWith(PREFIX_WEB)) {
+                    val q = trimmed.substring(PREFIX_WEB.length).trim()
+                    if (q.isNotBlank()) {
+                        val res = webSearch.search(q, settings.searchUrl, settings.searchKey)
+                        ThoughtLog.add(ThoughtLog.Tag.TOOL, "Веб-поиск «$q»: ${res.size} результатов")
+                        res
+                    } else {
+                        emptyList()
+                    }
+                } else {
+                    emptyList()
+                }
             val contextMessages = buildContext(conversationId, trimmed, recent, settings, webResults, weatherInfo, images)
 
             val engine = engineFactory.engineFor(settings)
+            val thinking = StringBuilder()
+            // GBNF only bites when tools are actually on offer; otherwise it would force the model
+            // to invent a call in an ordinary conversation.
+            val constrained = settings.strictToolCalls && toolsAvailable(settings)
             val sb = StringBuilder()
             val genStartMs = if (predictLength != null) System.currentTimeMillis() else 0L
             var tokens = 0
@@ -254,34 +282,62 @@ class Agent(
                     quick = true
                     ThoughtLog.add(
                         ThoughtLog.Tag.THINK,
-                        "Быстрый ответ включён: лимит ${predictLength} токенов (${engine.label})"
+                        "Быстрый ответ включён: лимит $predictLength токенов (${engine.label})"
                     )
                 }
                 emit(Event.Token(""))
                 ThoughtLog.add(ThoughtLog.Tag.THINK, "Размышляю над ответом… (${engine.label})")
+                if (constrained) {
+                    runCatching { engine.setGrammar(Grammar.forToolCalls()) }
+                        .onFailure { ThoughtLog.add(ThoughtLog.Tag.THINK, "Грамматика вызовов не применена: ${it.message}") }
+                }
                 GenerationCoordinator.withGeneration {
+                    val splitter = ReasoningSplitter()
                     engine.chat(contextMessages, predictLength).collect { tok ->
-                        sb.append(tok)
                         tokens++
-                        emit(Event.Token(tok))
+                        splitter.accept(tok).forEach { segment ->
+                            if (segment.reasoning) {
+                                thinking.append(segment.text)
+                                emit(Event.Thinking(segment.text))
+                            } else {
+                                sb.append(segment.text)
+                                emit(Event.Token(segment.text))
+                            }
+                        }
+                    }
+                    // Whatever is still buffered is a partial tag or a truncated tail: it belongs
+                    // to whichever section was open.
+                    splitter.finish().forEach { segment ->
+                        if (segment.reasoning) {
+                            thinking.append(segment.text)
+                            emit(Event.Thinking(segment.text))
+                        } else {
+                            sb.append(segment.text)
+                            emit(Event.Token(segment.text))
+                        }
                     }
                 }
             } catch (e: CancellationException) {
-                if (sb.isNotBlank()) persistAssistant(conversationId, sb.toString(), "cancelled")
+                if (constrained) runCatching { engine.setGrammar(null) }
+                if (sb.isNotBlank()) persistAssistant(conversationId, sb.toString(), thinking.toString(), "cancelled")
                 throw e
             } catch (e: Exception) {
-                if (sb.isNotBlank()) persistAssistant(conversationId, sb.toString(), "partial")
+                if (constrained) runCatching { engine.setGrammar(null) }
+                if (sb.isNotBlank()) persistAssistant(conversationId, sb.toString(), thinking.toString(), "partial")
                 emit(Event.Failure("движок: ${e.message}"))
                 return@flow
             }
 
+            // A grammar left on the sampler would constrain every later message too, so it is
+            // always cleared once the turn is over, including on the failure paths above.
+            if (constrained) runCatching { engine.setGrammar(null) }
             val full = sb.toString().trim()
             if (full.isNotBlank()) {
                 ToolCallParser().parse(full)?.let { call ->
                     toolConfirmation?.request(call)
                     emit(Event.ToolRequired(call))
                 }
-                persistAssistant(conversationId, full, "done")
+                persistAssistant(conversationId, full, thinking.toString().trim(), "done")
                 enqueueOutboxIfSync(settings, conversationId, full)
                 summarizeIfLong(conversationId, engine, settings)
             } else {
@@ -305,9 +361,15 @@ class Agent(
         }
     }.flowOn(Dispatchers.Default)
 
-    private suspend fun persistAssistant(conversationId: Long, text: String, status: String) {
+    private suspend fun persistAssistant(conversationId: Long, text: String, reasoning: String, status: String) {
         db.dao().insertMessage(
-            MessageEntity(conversationId = conversationId, role = "assistant", content = text, status = status)
+            MessageEntity(
+                conversationId = conversationId,
+                role = "assistant",
+                content = text,
+                status = status,
+                reasoning = reasoning
+            )
         )
     }
 
@@ -316,9 +378,13 @@ class Agent(
         val elapsedMs = System.currentTimeMillis() - startMs
         val tps = if (elapsedMs > 0L) tokens * 1000f / elapsedMs else 0f
         return buildString {
-            append("Ответ готов: ${full.length} симв. · %d ток. · %.1f ток/с · %.1f с".format(
-                tokens, tps, elapsedMs / 1000f
-            ))
+            append(
+                "Ответ готов: ${full.length} симв. · %d ток. · %.1f ток/с · %.1f с".format(
+                    tokens,
+                    tps,
+                    elapsedMs / 1000f
+                )
+            )
             if (quick) append(" · (быстро)")
         }
     }
@@ -343,38 +409,43 @@ class Agent(
         images: List<ImageAttachment> = emptyList()
     ): List<ChatMessage> {
         val selectedPersona = personaRepository?.selected()
-        val system = buildString {
-            append(selectedPersona?.systemPrompt?.trim().orEmpty().ifBlank { settings.persona.trim() })
-            append("\n\nУстройство: ${deviceFingerprint(settings)}")
-            weatherInfo?.let { append("\n\nДанные погоды (актуальны): $it") }
-            if (settings.memoryEnabled) {
-                if (settings.ragEnabled && vectorSearch != null) {
-                    val relevant = vectorSearch.context(userText, 5)
-                    if (relevant.isNotBlank()) append("\n\nСемантически релевантные факты:\n$relevant")
+        val system =
+            buildString {
+                append(selectedPersona?.systemPrompt?.trim().orEmpty().ifBlank { settings.persona.trim() })
+                append("\n\nУстройство: ${deviceFingerprint(settings)}")
+                weatherInfo?.let { append("\n\nДанные погоды (актуальны): $it") }
+                if (settings.memoryEnabled) {
+                    if (settings.ragEnabled && vectorSearch != null) {
+                        val relevant = vectorSearch.context(userText, 5)
+                        if (relevant.isNotBlank()) append("\n\nСемантически релевантные факты:\n$relevant")
+                    }
+                    val facts = db.dao().topFacts(50)
+                    if (facts.isNotEmpty()) {
+                        append("\n\nДолговременная память о пользователе:\n")
+                        append(facts.joinToString("\n") { "- ${it.fact}" })
+                    }
+                    val conv = db.dao().observeConversation(conversationId).first()
+                    if (conv?.summary.isNullOrBlank().not()) {
+                        append("\n\nИтоги прошлых бесед:\n").append(conv?.summary)
+                    }
                 }
-                val facts = db.dao().topFacts(50)
-                if (facts.isNotEmpty()) {
-                    append("\n\nДолговременная память о пользователе:\n")
-                    append(facts.joinToString("\n") { "- ${it.fact}" })
+                mcp?.tools?.value?.takeIf { it.isNotEmpty() }?.let { tools ->
+                    append("\n\nДоступные MCP-инструменты (вызов только через подтверждение пользователя):\n")
+                    append(tools.joinToString("\n") { "- ${it.prompt()}" })
+                    append("\nФормат вызова: <mcp_call>{\"server\":\"имя\",\"tool\":\"инструмент\",\"arguments\":{}}</mcp_call>")
                 }
-                val conv = db.dao().observeConversation(conversationId).first()
-                if (conv?.summary.isNullOrBlank().not()) {
-                    append("\n\nИтоги прошлых бесед:\n").append(conv?.summary)
+                if (webResults.isNotEmpty()) {
+                    append(
+                        "\n\nРезультаты веб-поиска. Ответь на запрос пользователя на их основе, " +
+                            "приведи ссылки на источники:\n"
+                    )
+                    append(
+                        webResults.joinToString("\n") { r ->
+                            "- ${r.title}: ${r.snippet}${if (r.url.isNotBlank()) " (${r.url})" else ""}"
+                        }
+                    )
                 }
             }
-            mcp?.tools?.value?.takeIf { it.isNotEmpty() }?.let { tools ->
-                append("\n\nДоступные MCP-инструменты (вызов только через подтверждение пользователя):\n")
-                append(tools.joinToString("\n") { "- ${it.prompt()}" })
-                append("\nФормат вызова: <mcp_call>{\"server\":\"имя\",\"tool\":\"инструмент\",\"arguments\":{}}</mcp_call>")
-            }
-            if (webResults.isNotEmpty()) {
-                append("\n\nРезультаты веб-поиска. Ответь на запрос пользователя на их основе, " +
-                    "приведи ссылки на источники:\n")
-                append(webResults.joinToString("\n") { r ->
-                    "- ${r.title}: ${r.snippet}${if (r.url.isNotBlank()) " (${r.url})" else ""}"
-                })
-            }
-        }
 
         ThoughtLog.context(system)
 
@@ -398,12 +469,13 @@ class Agent(
 
         try {
             val tail = db.dao().recentMessages(conversationId, 20).reversed()
-            val prompt = buildList {
-                add(ChatMessage.System(SUMMARY_PROMPT))
-                tail.forEach {
-                    add(if (it.role == "assistant") ChatMessage.Assistant(it.content) else ChatMessage.User(it.content))
+            val prompt =
+                buildList {
+                    add(ChatMessage.System(SUMMARY_PROMPT))
+                    tail.forEach {
+                        add(if (it.role == "assistant") ChatMessage.Assistant(it.content) else ChatMessage.User(it.content))
+                    }
                 }
-            }
             val sb = StringBuilder()
             engine.chat(prompt).collect { sb.append(it) }
             val summary = sb.toString().trim().take(1200)
@@ -413,7 +485,6 @@ class Agent(
             }
             lastSummarizedAt[conversationId] = count.toLong()
         } catch (e: Exception) {
-
         }
     }
 
@@ -432,6 +503,7 @@ class Agent(
             return (t.startsWith("отмени ") || t.startsWith("удали ") || t.startsWith("сними ")) &&
                 (t.contains("напоминани") || t.contains("таймеры") || t.contains("таймер "))
         }
+
         private const val SUMMARY_PROMPT =
             "Сожми беседу в 3-5 предложений долговременных фактов " +
                 "о пользователе и текущей задаче. Только факты, без приветствий."

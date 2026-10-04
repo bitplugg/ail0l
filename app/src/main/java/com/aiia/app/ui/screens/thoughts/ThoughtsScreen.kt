@@ -63,7 +63,10 @@ fun ThoughtsScreen() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Очистить журнал мыслей?", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        TextButtonLike("Да") { ThoughtLog.clear(); confirmClear = false }
+                        TextButtonLike("Да") {
+                            ThoughtLog.clear()
+                            confirmClear = false
+                        }
                         Spacer(Modifier.width(8.dp))
                         TextButtonLike("Нет") { confirmClear = false }
                     }

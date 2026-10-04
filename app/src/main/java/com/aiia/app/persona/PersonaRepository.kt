@@ -19,11 +19,12 @@ class PersonaRepository(
     suspend fun ensureDefault(): PersonaEntity = mutationMutex.withLock {
         val existing = db.dao().observePersonas().first().firstOrNull { it.isDefault }
         if (existing != null) return@withLock existing
-        val default = PersonaEntity(
-            name = "AIIA",
-            systemPrompt = "Ты AIIA — дружелюбный и точный ИИ-напарник.",
-            isDefault = true
-        )
+        val default =
+            PersonaEntity(
+                name = "AIIA",
+                systemPrompt = "Ты AIIA — дружелюбный и точный ИИ-напарник.",
+                isDefault = true
+            )
         val id = db.dao().upsertPersona(default)
         if (settings.settings.first().activePersonaId == 0L) settings.setActivePersona(id)
         db.dao().persona(id) ?: default.copy(id = id)

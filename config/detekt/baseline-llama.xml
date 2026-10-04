@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>LabeledExpression:InferenceEngineImpl.kt$InferenceEngineImpl$@flow</ID>
+    <ID>LabeledExpression:InferenceEngineImpl.kt$InferenceEngineImpl$@withContext</ID>
+  </CurrentIssues>
+</SmellBaseline>
